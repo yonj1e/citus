@@ -80,6 +80,14 @@ BEGIN
     RETURN true;
 END;
 $func$;
+CREATE FUNCTION citus_stop_test_worker(int)
+    RETURNS int
+    AS 'citus'
+    LANGUAGE C;
+CREATE FUNCTION citus_start_test_worker(int)
+    RETURNS void
+    AS 'citus'
+    LANGUAGE C;
 --
 -- Procedure for creating shards for range partitioned distributed table.
 --

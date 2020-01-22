@@ -401,6 +401,80 @@ SELECT * FROM researchers WHERE lab_id=10;
  32 |     10 | Raymond Smullyan
 (2 rows)
 
+-- Test https://github.com/citusdata/citus/issues/2179
+CREATE TABLE ref(a int unique, b int);
+SELECT create_reference_table('ref');
+ create_reference_table
+---------------------------------------------------------------------
+
+(1 row)
+
+BEGIN;
+SAVEPOINT start;
+INSERT INTO ref VALUES (1001,2);
+SELECT citus_stop_test_worker(:worker_2_port);
+ citus_stop_test_worker
+---------------------------------------------------------------------
+                      0
+(1 row)
+
+SELECT * FROM ref;
+WARNING:  connection error: localhost:xxxxx
+WARNING:  SSL connection has been closed unexpectedly
+ERROR:  connection error: localhost:xxxxx
+ROLLBACK TO SAVEPOINT start;
+SELECT * FROM ref;
+ a | b
+---------------------------------------------------------------------
+(0 rows)
+
+END;
+ERROR:  could not make changes to shard xxxxx on any node
+SELECT citus_start_test_worker(:worker_2_port);
+ citus_start_test_worker
+---------------------------------------------------------------------
+
+(1 row)
+
+SELECT shardid FROM pg_dist_shard
+JOIN pg_dist_placement USING (shardid)
+WHERE shardstate = 3 AND logicalrelid = 'ref';
+ERROR:  invalid input syntax for oid: "ref" at character 114
+SELECT * FROM ref ORDER BY 1;
+ a | b
+---------------------------------------------------------------------
+(0 rows)
+
+-- Test https://github.com/citusdata/citus/issues/3360
+BEGIN;
+SELECT * FROM artists JOIN ref ON id = a;
+ id | name | a | b
+---------------------------------------------------------------------
+(0 rows)
+
+SELECT citus_stop_test_worker(:worker_2_port);
+ citus_stop_test_worker
+---------------------------------------------------------------------
+                      0
+(1 row)
+
+INSERT INTO ref VALUES (1002,2);
+WARNING:  terminating connection due to administrator command
+WARNING:  could not issue cancel request
+ERROR:  connection error: localhost:xxxxx
+END;
+SELECT citus_start_test_worker(:worker_2_port);
+ citus_start_test_worker
+---------------------------------------------------------------------
+
+(1 row)
+
+SELECT * FROM ref ORDER BY 1;
+ a | b
+---------------------------------------------------------------------
+(0 rows)
+
 -- Clean-up
 DROP TABLE artists;
 DROP TABLE researchers;
+DROP TABLE ref;
