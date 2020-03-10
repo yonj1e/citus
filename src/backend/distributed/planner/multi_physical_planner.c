@@ -2154,7 +2154,6 @@ QueryPushdownSqlTaskList(Query *query, uint64 jobId,
 	ListCell *restrictionCell = NULL;
 	uint32 taskIdIndex = 1; /* 0 is reserved for invalid taskId */
 	int shardCount = 0;
-	bool *taskRequiredForShardIndex = NULL;
 	ListCell *prunedRelationShardCell = NULL;
 
 	/* error if shards are not co-partitioned */
@@ -2167,8 +2166,7 @@ QueryPushdownSqlTaskList(Query *query, uint64 jobId,
 	}
 
 	/* defaults to be used if this is a reference table-only query */
-	int minShardOffset = 0;
-	int maxShardOffset = 0;
+	Bitmapset *prunedShards = NULL;
 
 	forboth(prunedRelationShardCell, prunedRelationShardList,
 			restrictionCell, relationRestrictionContext->relationRestrictionList)
@@ -2186,20 +2184,15 @@ QueryPushdownSqlTaskList(Query *query, uint64 jobId,
 		}
 
 		/* we expect distributed tables to have the same shard count */
-		if (shardCount > 0 && shardCount != cacheEntry->shardIntervalArrayLength)
+		if (shardCount == 0)
+		{
+			/* first time we loop we keep track of the shardCount */
+			shardCount = cacheEntry->shardIntervalArrayLength;
+		}
+		else if (shardCount > 0 && shardCount != cacheEntry->shardIntervalArrayLength)
 		{
 			ereport(ERROR, (errmsg("shard counts of co-located tables do not "
 								   "match")));
-		}
-
-		if (taskRequiredForShardIndex == NULL)
-		{
-			shardCount = cacheEntry->shardIntervalArrayLength;
-			taskRequiredForShardIndex = (bool *) palloc0(shardCount);
-
-			/* there is a distributed table, find the shard range */
-			minShardOffset = shardCount;
-			maxShardOffset = -1;
 		}
 
 		/*
@@ -2217,16 +2210,17 @@ QueryPushdownSqlTaskList(Query *query, uint64 jobId,
 			continue;
 		}
 
+		/* todo, store bitmapset on relationRestriction, next to or in place of pruned shardlist*/
+		Bitmapset *relationPrunedShards = NULL;
 		foreach(shardIntervalCell, prunedShardList)
 		{
 			ShardInterval *shardInterval = (ShardInterval *) lfirst(shardIntervalCell);
 			int shardIndex = shardInterval->shardIndex;
 
-			taskRequiredForShardIndex[shardIndex] = true;
-
-			minShardOffset = Min(minShardOffset, shardIndex);
-			maxShardOffset = Max(maxShardOffset, shardIndex);
+			relationPrunedShards = bms_add_member(relationPrunedShards, shardIndex);
 		}
+
+		prunedShards = bms_add_members(prunedShards, relationPrunedShards);
 	}
 
 	/*
@@ -2240,14 +2234,11 @@ QueryPushdownSqlTaskList(Query *query, uint64 jobId,
 	 * given that hash-distributed tables typically only have a few shards the
 	 * iteration is still very fast.
 	 */
-	for (int shardOffset = minShardOffset; shardOffset <= maxShardOffset; shardOffset++)
-	{
-		if (taskRequiredForShardIndex != NULL && !taskRequiredForShardIndex[shardOffset])
-		{
-			/* this shard index is pruned away for all relations */
-			continue;
-		}
 
+	/* TODO decide if bms_next_member is fast enough to not keep shardmin and shard max */
+	int shardOffset = -1;
+	while ((shardOffset = bms_next_member(prunedShards, shardOffset)) >= 0)
+	{
 		Task *subqueryTask = QueryPushdownTaskCreate(query, shardOffset,
 													 relationRestrictionContext,
 													 taskIdIndex,
