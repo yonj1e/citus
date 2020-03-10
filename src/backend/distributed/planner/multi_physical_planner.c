@@ -2220,7 +2220,14 @@ QueryPushdownSqlTaskList(Query *query, uint64 jobId,
 			relationPrunedShards = bms_add_member(relationPrunedShards, shardIndex);
 		}
 
-		prunedShards = bms_add_members(prunedShards, relationPrunedShards);
+		if (prunedShards)
+		{
+			prunedShards = bms_int_members(prunedShards, relationPrunedShards);
+		}
+		else
+		{
+			prunedShards = bms_copy(relationPrunedShards);
+		}
 	}
 
 	/*
