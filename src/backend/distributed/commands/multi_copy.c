@@ -340,7 +340,7 @@ CitusCopyFrom(CopyStmt *copyStatement, char *completionTag)
 	EnsurePartitionTableNotReplicated(relationId);
 
 	if (partitionMethod == DISTRIBUTE_BY_HASH || partitionMethod == DISTRIBUTE_BY_RANGE ||
-		partitionMethod == DISTRIBUTE_BY_NONE)
+		IsNoDistributionKeyMethod(partitionMethod))
 	{
 		CopyToExistingShards(copyStatement, completionTag);
 	}
