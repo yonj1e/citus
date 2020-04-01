@@ -560,6 +560,9 @@ ExecutePlanIntoColocatedIntermediateResults(Oid targetRelationId,
 	bool stopOnFailure = false;
 
 	char partitionMethod = PartitionMethod(targetRelationId);
+
+	Assert(partitionMethod != COORDINATOR_TABLE);
+
 	if (partitionMethod == DISTRIBUTE_BY_NONE)
 	{
 		stopOnFailure = true;
@@ -602,6 +605,9 @@ ExecutePlanIntoRelation(Oid targetRelationId, List *insertTargetList,
 	bool stopOnFailure = false;
 
 	char partitionMethod = PartitionMethod(targetRelationId);
+
+	Assert(partitionMethod != COORDINATOR_TABLE);
+
 	if (partitionMethod == DISTRIBUTE_BY_NONE)
 	{
 		stopOnFailure = true;

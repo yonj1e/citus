@@ -66,6 +66,8 @@ partition_task_list_results(PG_FUNCTION_ARGS)
 
 	CitusTableCacheEntry *targetRelation = GetCitusTableCacheEntry(relationId);
 
+	Assert(targetRelation->partitionMethod != COORDINATOR_TABLE);
+
 	/*
 	 * Here SELECT query's target list should match column list of target relation,
 	 * so their partition column indexes are equal.
@@ -133,6 +135,8 @@ redistribute_task_list_results(PG_FUNCTION_ARGS)
 	List *taskList = job->taskList;
 
 	CitusTableCacheEntry *targetRelation = GetCitusTableCacheEntry(relationId);
+
+	Assert(targetRelation->partitionMethod != COORDINATOR_TABLE);
 
 	/*
 	 * Here SELECT query's target list should match column list of target relation,

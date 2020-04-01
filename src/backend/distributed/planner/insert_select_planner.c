@@ -318,6 +318,10 @@ DistributedInsertSelectSupported(Query *queryTree, RangeTblEntry *insertRte,
 	Oid selectPartitionColumnTableId = InvalidOid;
 	Oid targetRelationId = insertRte->relid;
 	char targetPartitionMethod = PartitionMethod(targetRelationId);
+
+	/* not expecting again */
+	Assert(targetPartitionMethod != COORDINATOR_TABLE);
+
 	ListCell *rangeTableCell = NULL;
 
 	/* we only do this check for INSERT ... SELECT queries */

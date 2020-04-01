@@ -2188,6 +2188,10 @@ QueryPushdownSqlTaskList(Query *query, uint64 jobId,
 		ListCell *shardIntervalCell = NULL;
 
 		CitusTableCacheEntry *cacheEntry = GetCitusTableCacheEntry(relationId);
+
+		/* again */
+		Assert(cacheEntry->partitionMethod != COORDINATOR_TABLE);
+
 		if (cacheEntry->partitionMethod == DISTRIBUTE_BY_NONE)
 		{
 			continue;
@@ -2347,6 +2351,10 @@ ErrorIfUnsupportedShardDistribution(Query *query)
 	{
 		Oid relationId = lfirst_oid(relationIdCell);
 		char partitionMethod = PartitionMethod(relationId);
+
+		/* assert */
+		Assert(partitionMethod != COORDINATOR_TABLE);
+
 		if (partitionMethod == DISTRIBUTE_BY_RANGE)
 		{
 			rangeDistributedRelationCount++;
@@ -2473,6 +2481,10 @@ QueryPushdownTaskCreate(Query *originalQuery, int shardIndex,
 		ShardInterval *shardInterval = NULL;
 
 		CitusTableCacheEntry *cacheEntry = GetCitusTableCacheEntry(relationId);
+		
+		/* a */
+		Assert(cacheEntry->partitionMethod != COORDINATOR_TABLE);
+
 		if (cacheEntry->partitionMethod == DISTRIBUTE_BY_NONE)
 		{
 			/* reference table only has one shard */
@@ -3963,7 +3975,7 @@ ShardIntervalsOverlap(ShardInterval *firstInterval, ShardInterval *secondInterva
 	CitusTableCacheEntry *intervalRelation =
 		GetCitusTableCacheEntry(firstInterval->relationId);
 
-	Assert(intervalRelation->partitionMethod != DISTRIBUTE_BY_NONE);
+	Assert(!IsSingleShardDistribution(intervalRelation->partitionMethod));
 
 	FmgrInfo *comparisonFunction = intervalRelation->shardIntervalCompareFunction;
 	Oid collation = intervalRelation->partitionColumn->varcollid;

@@ -78,8 +78,12 @@ RebuildQueryStrings(Job *workerJob)
 			RangeTblEntry *copiedSubqueryRte = ExtractSelectRangeTableEntry(query);
 			Query *copiedSubquery = copiedSubqueryRte->subquery;
 
-			/* there are no restrictions to add for reference tables */
 			char partitionMethod = PartitionMethod(shardInterval->relationId);
+
+			/* we do not expect coordinator tables in executor */
+			Assert(partitionMethod != COORDINATOR_TABLE);
+
+			/* there are no restrictions to add for reference tables */
 			if (partitionMethod != DISTRIBUTE_BY_NONE)
 			{
 				AddShardIntervalRestrictionToSelect(copiedSubquery, shardInterval);

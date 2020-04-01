@@ -646,6 +646,8 @@ EquivalenceListContainsRelationsEquality(List *attributeEquivalenceList,
 			(RelationRestriction *) lfirst(relationRestrictionCell);
 		int rteIdentity = GetRTEIdentity(relationRestriction->rte);
 
+		Assert(PartitionMethod(relationRestriction->relationId) != COORDINATOR_TABLE);
+
 		/* we shouldn't check for the equality of reference tables */
 		if (PartitionMethod(relationRestriction->relationId) == DISTRIBUTE_BY_NONE)
 		{
@@ -1683,6 +1685,8 @@ AllRelationsInRestrictionContextColocated(RelationRestrictionContext *restrictio
 	foreach_ptr(relationRestriction, restrictionContext->relationRestrictionList)
 	{
 		Oid relationId = relationRestriction->relationId;
+
+		Assert(PartitionMethod(relationId) != COORDINATOR_TABLE);
 
 		if (PartitionMethod(relationId) == DISTRIBUTE_BY_NONE)
 		{

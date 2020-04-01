@@ -668,6 +668,8 @@ AdaptiveExecutor(CitusScanState *scanState)
 	int targetPoolSize = MaxAdaptiveExecutorPoolSize;
 	List *jobIdList = NIL;
 
+	Assert(PartitionMethod(distributedPlan->targetRelationId) != COORDINATOR_TABLE);
+
 	Job *job = distributedPlan->workerJob;
 	List *taskList = job->taskList;
 

@@ -412,6 +412,9 @@ ReplicateColocatedShardPlacement(int64 shardId, char *sourceNodeName,
 		List *foreignConstraintCommandList = GetTableForeignConstraintCommands(
 			colocatedTableId);
 
+		/* here we already do not expect a COORDINATOR_TABLE */
+		Assert(PartitionMethod(colocatedTableId) != COORDINATOR_TABLE);
+
 		if (foreignConstraintCommandList != NIL &&
 			PartitionMethod(colocatedTableId) != DISTRIBUTE_BY_NONE)
 		{

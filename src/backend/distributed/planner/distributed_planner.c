@@ -1934,6 +1934,9 @@ multi_relation_restriction_hook(PlannerInfo *root, RelOptInfo *relOptInfo,
 	{
 		cacheEntry = GetCitusTableCacheEntry(rte->relid);
 
+		/* we are not expecting coordinator tables here */
+		Assert(cacheEntry->partitionMethod != COORDINATOR_TABLE);
+
 		relationRestrictionContext->allReferenceTables &=
 			(cacheEntry->partitionMethod == DISTRIBUTE_BY_NONE);
 	}

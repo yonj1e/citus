@@ -1032,6 +1032,8 @@ SinglePartitionJoin(JoinOrderNode *currentJoinNode, TableEntry *candidateTable,
 		}
 	}
 
+	Assert(candidatePartitionMethod != COORDINATOR_TABLE);
+
 	/* evaluate re-partitioning the current table only if the rule didn't apply above */
 	if (candidatePartitionMethod != DISTRIBUTE_BY_NONE)
 	{

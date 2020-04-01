@@ -1081,6 +1081,8 @@ MultiShardModifyQuerySupported(Query *originalQuery,
 	Oid resultRelationOid = resultRangeTable->relid;
 	char resultPartitionMethod = PartitionMethod(resultRelationOid);
 
+	Assert(resultPartitionMethod != COORDINATOR_TABLE);
+
 	if (HasDangerousJoinUsing(originalQuery->rtable, (Node *) originalQuery->jointree))
 	{
 		errorMessage = DeferredError(ERRCODE_FEATURE_NOT_SUPPORTED,
@@ -1894,6 +1896,8 @@ SingleShardModifyTaskList(Query *query, uint64 jobId, List *relationShardList,
 		updateOrDeleteRTE->relid);
 	char modificationPartitionMethod = modificationTableCacheEntry->partitionMethod;
 
+	Assert(modificationPartitionMethod != COORDINATOR_TABLE);
+
 	if (modificationPartitionMethod == DISTRIBUTE_BY_NONE &&
 		SelectsFromDistributedTable(rangeTableList, query))
 	{
@@ -2313,6 +2317,8 @@ TargetShardIntervalForFastPathQuery(Query *query, bool *isMultiShardQuery,
 {
 	Oid relationId = ExtractFirstCitusTableId(query);
 
+	Assert(PartitionMethod(relationId) != COORDINATOR_TABLE);
+
 	if (PartitionMethod(relationId) == DISTRIBUTE_BY_NONE)
 	{
 		/* we don't need to do shard pruning for reference tables */
@@ -2579,6 +2585,8 @@ BuildRoutesForInsert(Query *query, DeferredErrorMessage **planningError)
 	ListCell *insertValuesCell = NULL;
 
 	Assert(query->commandType == CMD_INSERT);
+
+	Assert(partitionMethod != COORDINATOR_TABLE);
 
 	/* reference tables can only have one shard */
 	if (partitionMethod == DISTRIBUTE_BY_NONE)
@@ -3037,6 +3045,9 @@ ExtractInsertPartitionKeyValue(Query *query)
 	Const *singlePartitionValueConst = NULL;
 
 	char partitionMethod = PartitionMethod(distributedTableId);
+
+	Assert(partitionMethod != COORDINATOR_TABLE);
+
 	if (partitionMethod == DISTRIBUTE_BY_NONE)
 	{
 		return NULL;
@@ -3170,6 +3181,9 @@ MultiRouterPlannableQuery(Query *query)
 			}
 
 			char partitionMethod = PartitionMethod(distributedTableId);
+
+			Assert(partitionMethod != COORDINATOR_TABLE);
+
 			if (!(partitionMethod == DISTRIBUTE_BY_HASH || partitionMethod ==
 				  DISTRIBUTE_BY_NONE || partitionMethod == DISTRIBUTE_BY_RANGE))
 			{

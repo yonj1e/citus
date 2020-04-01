@@ -692,6 +692,8 @@ CheckConflictingRelationAccesses(Oid relationId, ShardPlacementAccessType access
 
 	CitusTableCacheEntry *cacheEntry = GetCitusTableCacheEntry(relationId);
 
+	Assert(cacheEntry->partitionMethod != COORDINATOR_TABLE);
+
 	if (!(cacheEntry->partitionMethod == DISTRIBUTE_BY_NONE &&
 		  cacheEntry->referencingRelationsViaForeignKey != NIL))
 	{

@@ -284,6 +284,9 @@ TargetListOnPartitionColumn(Query *query, List *targetEntryList)
 
 		FindReferencedTableColumn(targetExpression, NIL, query, &relationId, &column);
 
+		/* not expecting */
+		Assert(!IsCitusTable(relationId) || PartitionMethod(relationId) != COORDINATOR_TABLE);
+
 		/*
 		 * If the expression belongs to a reference table continue searching for
 		 * other partition keys.

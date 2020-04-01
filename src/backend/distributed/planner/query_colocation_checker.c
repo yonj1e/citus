@@ -152,6 +152,8 @@ AnchorRte(Query *subquery)
 		{
 			Oid relationId = currentRte->relid;
 
+			Assert(PartitionMethod(relationId) != COORDINATOR_TABLE);
+
 			if (PartitionMethod(relationId) == DISTRIBUTE_BY_NONE)
 			{
 				/*

@@ -205,6 +205,10 @@ FastPathRouterQuery(Query *query, Node **distributionKeyValue)
 	/* we don't want to deal with append/range distributed tables */
 	Oid distributedTableId = rangeTableEntry->relid;
 	CitusTableCacheEntry *cacheEntry = GetCitusTableCacheEntry(distributedTableId);
+
+	/* we are not expecting a coordinator table to be found in a fast path query */
+	Assert(cacheEntry->partitionMethod != COORDINATOR_TABLE);
+
 	if (!(cacheEntry->partitionMethod == DISTRIBUTE_BY_HASH ||
 		  cacheEntry->partitionMethod == DISTRIBUTE_BY_NONE))
 	{
