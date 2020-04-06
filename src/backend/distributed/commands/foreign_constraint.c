@@ -176,6 +176,9 @@ ErrorIfUnsupportedForeignConstraintExists(Relation referencingRelation,
 		 */
 		bool foreignKeyToLocalTable = !referencedIsCitusTable && !selfReferencingTable;
 
+		/* a similar comment like the above one applies here as well */
+		bool foreignKeyFromLocalTable = !referencingIsCitusTable && !selfReferencingTable;
+
 		if (foreignKeyToLocalTable)
 		{
 			if (referencingDistMethod == COORDINATOR_TABLE)
@@ -219,6 +222,28 @@ ErrorIfUnsupportedForeignConstraintExists(Relation referencingRelation,
 			referencedDistMethod = referencingDistMethod;
 			referencedDistKey = referencingDistKey;
 			referencedColocationId = referencingColocationId;
+		}
+
+		if (foreignKeyFromLocalTable)
+		{
+			if (referencedDistMethod == COORDINATOR_TABLE)
+			{
+				/*
+				 * We support foreign keys from local tables to coordinator
+				 * tables.
+				 */
+				heapTuple = systable_getnext(scanDescriptor);
+				continue;
+			}
+
+			/*
+			 * We do not allow foreign keys to citus tables from local tables
+			 * (except to coordinator tables).
+			 */
+			ereport(ERROR, (errcode(ERRCODE_INVALID_TABLE_DEFINITION),
+							errmsg("cannot create foreign key constraint"),
+							errdetail("Foreign keys to local tables are only"
+									  "allowed from coordinator tables.")));
 		}
 
 		/*

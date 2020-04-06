@@ -870,6 +870,17 @@ ErrorIfUnsupportedConstraint(Relation relation, char distributionMethod,
 											  distributionColumn,
 											  colocationId);
 
+	if (!IsCitusTable(relation->rd_id))
+	{
+		/*
+		 * It is only possible to pass a local table when setting foreign key
+		 * from a local table to a coordinator table. This case was already
+		 * handled or error'ed out in ErrorIfUnsupportedForeignConstraintExists
+		 * function.
+		 */
+		return;
+	}
+
 	/*
 	 * Citus supports any kind of uniqueness constraints for reference tables
 	 * and coordinator tables given that they only consist of a single shard
@@ -1442,10 +1453,23 @@ ErrorIfUnsupportedAlterAddConstraintStmt(AlterTableStmt *alterTableStatement)
 {
 	LOCKMODE lockmode = AlterTableGetLockLevel(alterTableStatement->cmds);
 	Oid relationId = AlterTableLookupRelation(alterTableStatement, lockmode);
-	char distributionMethod = PartitionMethod(relationId);
-	Var *distributionColumn = DistPartitionKey(relationId);
-	uint32 colocationId = TableColocationId(relationId);
 	Relation relation = relation_open(relationId, ExclusiveLock);
+
+	/*
+	 * It is possible that we can define foreign keys from local tables to
+	 * coordinator tables. In this case, below variables should be passed as
+	 * the invalid ones.
+	 */
+	char distributionMethod = 0;
+	Var *distributionColumn = NULL;
+	uint32 colocationId = INVALID_COLOCATION_ID;
+
+	if (IsCitusTable(relationId))
+	{
+		distributionMethod = PartitionMethod(relationId);
+		distributionColumn = DistPartitionKey(relationId);
+		colocationId = TableColocationId(relationId);
+	}
 
 	ErrorIfUnsupportedConstraint(relation, distributionMethod, distributionColumn,
 								 colocationId);
