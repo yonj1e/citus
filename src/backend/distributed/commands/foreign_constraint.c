@@ -178,13 +178,25 @@ ErrorIfUnsupportedForeignConstraintExists(Relation referencingRelation,
 
 		if (foreignKeyToLocalTable)
 		{
+			if (referencingDistMethod == COORDINATOR_TABLE)
+			{
+				/*
+				 * We support foreign keys from coordinator tables to local
+				 * tables.
+				 */
+				heapTuple = systable_getnext(scanDescriptor);
+				continue;
+			}
+
+			/*
+			 * We do not allow foreign keys from citus tables to local tables
+			 * (except from coordinator tables).
+			 */
 			ereport(ERROR, (errcode(ERRCODE_INVALID_TABLE_DEFINITION),
 							errmsg("cannot create foreign key constraint"),
-							errdetail("Referenced table must be a distributed table"
-									  " or a reference table.")));
+							errdetail("Foreign keys to local tables are only"
+									  "allowed from coordinator tables.")));
 		}
-
-		/* at this point, referenced table is certainly a citus table */
 
 		char referencedDistMethod = 0;
 		Var *referencedDistKey = NULL;
@@ -209,36 +221,59 @@ ErrorIfUnsupportedForeignConstraintExists(Relation referencingRelation,
 			referencedColocationId = referencingColocationId;
 		}
 
-		bool referencingIsReferenceTable = (referencingDistMethod == DISTRIBUTE_BY_NONE);
-		bool referencedIsReferenceTable = (referencedDistMethod == DISTRIBUTE_BY_NONE);
-
 		/*
-		 * We support foreign keys between reference tables. No more checks
-		 * are necessary.
+		 * We support foreign keys between reference tables and coordinator tables.
+		 * No more checks are necessary.
 		 */
-		if (referencingIsReferenceTable && referencedIsReferenceTable)
+		bool referencingHasNoDistributionKey = IsNoDistributionKeyMethod(
+			referencingDistMethod);
+		bool referencedHasNoDistributionKey = IsNoDistributionKeyMethod(
+			referencedDistMethod);
+
+		if (referencingHasNoDistributionKey && referencedHasNoDistributionKey)
 		{
 			heapTuple = systable_getnext(scanDescriptor);
 			continue;
 		}
 
-		/*
-		 * Foreign keys from reference tables to distributed tables are not
-		 * supported.
-		 */
-		if (referencingIsReferenceTable && !referencedIsReferenceTable)
+		bool referencingIsReferenceTable = (referencingDistMethod == DISTRIBUTE_BY_NONE);
+		bool referencedIsReferenceTable = (referencedDistMethod == DISTRIBUTE_BY_NONE);
+
+		bool referencingIsCoordinatorTable = (referencingDistMethod == COORDINATOR_TABLE);
+
+		if (!referencedHasNoDistributionKey)
 		{
-			ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-							errmsg("cannot create foreign key constraint "
-								   "since foreign keys from reference tables "
-								   "to distributed tables are not supported"),
-							errdetail("A reference table can only have reference "
-									  "keys to other reference tables")));
+			/*
+			 * Foreign keys from reference tables and coordinator tables to
+			 * distributed tables are not supported.
+			 */
+			if (referencingIsReferenceTable)
+			{
+				ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+								errmsg("cannot create foreign key constraint "
+									   "since foreign keys from reference tables "
+									   "to distributed tables are not supported"),
+								errdetail("A reference table can only have reference "
+										  "keys to other reference tables or "
+										  "coordinator tables")));
+			}
+			else if (referencingIsCoordinatorTable)
+			{
+				ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+								errmsg("cannot create foreign key constraint "
+									   "since foreign keys from coordinator tables "
+									   "to distributed tables are not supported"),
+								errdetail("A coordinator table can only have reference "
+										  "keys to other coordinator tables or "
+										  " reference tables")));
+			}
 		}
 
 		/*
 		 * To enforce foreign constraints, tables must be co-located unless a
-		 * reference table is referenced.
+		 * reference table is referenced. Note that we will also error out for
+		 * foreign keys from distributed tables to coordinator tables and local
+		 * tables.
 		 */
 		if (referencingColocationId == INVALID_COLOCATION_ID ||
 			(referencingColocationId != referencedColocationId &&
