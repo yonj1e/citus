@@ -323,18 +323,15 @@ CreateColocatedShards(Oid targetRelationId, Oid sourceRelationId, bool
 
 
 /*
- * CreateReferenceTableShard creates a single shard for the given
+ * CreateTableShardWithoutDistKey creates a single shard for the given
  * distributedTableId. The created shard does not have min/max values.
- * Also, the shard is replicated to the all active nodes in the cluster.
+ * Also, the shard is replicated to the all active nodes in the cluster
+ * if we are creating a reference table.
  */
 void
-CreateReferenceTableShard(Oid distributedTableId)
+CreateTableShardWithoutDistKey(Oid distributedTableId, char distributionMethod)
 {
-	int workerStartIndex = 0;
-	text *shardMinValue = NULL;
-	text *shardMaxValue = NULL;
-	bool useExclusiveConnection = false;
-	bool colocatedShard = false;
+	Assert(CitusTableWithoutDistributionKey(distributionMethod));
 
 	/*
 	 * In contrast to append/range partitioned tables it makes more sense to
@@ -360,24 +357,44 @@ CreateReferenceTableShard(Oid distributedTableId)
 							   tableName)));
 	}
 
-	/*
-	 * load and sort the worker node list for deterministic placements
-	 * create_reference_table has already acquired pg_dist_node lock
-	 */
-	List *nodeList = ReferenceTablePlacementNodeList(ShareLock);
-	nodeList = SortList(nodeList, CompareWorkerNodes);
+	List *nodeList = NIL;
+	int replicationFactor = 0;
 
-	int replicationFactor = ReferenceTableReplicationFactor();
+	if (distributionMethod == DISTRIBUTE_BY_NONE)
+	{
+		/*
+		 * load and sort the worker node list for deterministic placements
+		 * create_reference_table has already acquired pg_dist_node lock
+		 */
+		nodeList = ReferenceTablePlacementNodeList(ShareLock);
+		nodeList = SortList(nodeList, CompareWorkerNodes);
+
+		replicationFactor = ReferenceTableReplicationFactor();
+	}
+	else if (distributionMethod == COORDINATOR_TABLE)
+	{
+		nodeList = CoordinatorTablePlacementNodeList(ShareLock);
+
+		/* would always have a single placement */
+		replicationFactor = 1;
+	}
 
 	/* get the next shard id */
 	uint64 shardId = GetNextShardId();
 
+	text *shardMinValue = NULL;
+	text *shardMaxValue = NULL;
+
 	InsertShardRow(distributedTableId, shardId, shardStorageType, shardMinValue,
 				   shardMaxValue);
 
+	int workerStartIndex = 0;
 	List *insertedShardPlacements = InsertShardPlacementRows(distributedTableId, shardId,
 															 nodeList, workerStartIndex,
 															 replicationFactor);
+
+	bool useExclusiveConnection = false;
+	bool colocatedShard = false;
 
 	CreateShardsOnWorkers(distributedTableId, insertedShardPlacements,
 						  useExclusiveConnection, colocatedShard);

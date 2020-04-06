@@ -116,6 +116,7 @@ static bool CanUseExclusiveConnections(Oid relationId, bool localTableEmpty);
 PG_FUNCTION_INFO_V1(master_create_distributed_table);
 PG_FUNCTION_INFO_V1(create_distributed_table);
 PG_FUNCTION_INFO_V1(create_reference_table);
+PG_FUNCTION_INFO_V1(create_coordinator_table);
 
 
 /*
@@ -197,6 +198,33 @@ create_reference_table(PG_FUNCTION_ARGS)
 
 
 /*
+ * create_coordinator_table creates a citus table with the given relationId.
+ * The created table has one shard, replication factor is set to the 1. On the
+ * contrary of reference tables, a coordinator table has only one placement and
+ * that placement will be in the coordinator.
+ * In fact, the above is the definition of a coordinator table in Citus.
+ */
+Datum
+create_coordinator_table(PG_FUNCTION_ARGS)
+{
+	Oid relationOid = PG_GETARG_OID(0);
+
+	text *distributionColumnText = NULL;
+	text *colocateWithTableNameText = NULL;
+
+	char distributionMethod = COORDINATOR_TABLE;
+
+	const bool viaDeprecatedApi = false;
+
+	create_citus_table_internal(relationOid, distributionColumnText,
+								distributionMethod, colocateWithTableNameText,
+								viaDeprecatedApi);
+
+	PG_RETURN_VOID();
+}
+
+
+/*
  * create_citus_table_internal is the internal method to be used via udfs
  * creating citus tables
  */
@@ -244,7 +272,32 @@ create_citus_table_internal(Oid relationOid, text *distributionColumnText,
 	Var *distributionColumn;
 	char *colocateWithTableName;
 
-	if (distributionMethod == DISTRIBUTE_BY_NONE)
+	if (distributionMethod == COORDINATOR_TABLE)
+	{
+		/* create coordinator table */
+
+		/* no path via deprecated api to create coordinator tables */
+		Assert(viaDeprecatedApi == false);
+
+		/* following should be NULL when creating coordinator table */
+		Assert(colocateWithTableNameText == NULL && distributionColumnText == NULL);
+
+		if (!IsCoordinator() || !CoordinatorAddedAsWorkerNode())
+		{
+			const char *relationName = get_rel_name(relationOid);
+
+			Assert(relationName != NULL);
+
+			ereport(ERROR, (errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+							errmsg("cannot create coordinator table \"%s\", coordinator "
+								   "tables can only be created from coordinator node if "
+								   "it is added to pg_dist_node", relationName)));
+		}
+
+		distributionColumn = NULL;
+		colocateWithTableName = NULL;
+	}
+	else if (distributionMethod == DISTRIBUTE_BY_NONE)
 	{
 		/* create reference table */
 
@@ -358,14 +411,17 @@ CreateDistributedTable(Oid relationId, Var *distributionColumn, char distributio
 		return;
 	}
 
-	/* create shards for hash distributed and reference tables */
+	/*
+	 * Create shards for hash distributed tables and citus tables having no
+	 * distribution keys
+	 */
 	if (distributionMethod == DISTRIBUTE_BY_HASH)
 	{
 		CreateHashDistributedTableShards(relationId, colocatedTableId, localTableEmpty);
 	}
-	else if (distributionMethod == DISTRIBUTE_BY_NONE)
+	else if (CitusTableWithoutDistributionKey(distributionMethod))
 	{
-		CreateReferenceTableShard(relationId);
+		CreateTableShardWithoutDistKey(relationId, distributionMethod);
 	}
 
 	if (ShouldSyncTableMetadata(relationId))
@@ -395,9 +451,14 @@ CreateDistributedTable(Oid relationId, Var *distributionColumn, char distributio
 		}
 	}
 
-	/* copy over data for hash distributed and reference tables */
+	/*
+	 * Copy over data for hash distributed tables and citus tables having no
+	 * distribution keys.
+	 * FIXME: here, for the coordinator tables, we could choose to  convert
+	 * the local table to the shard instead of copying data
+	 */
 	if (distributionMethod == DISTRIBUTE_BY_HASH ||
-		distributionMethod == DISTRIBUTE_BY_NONE)
+		CitusTableWithoutDistributionKey(distributionMethod))
 	{
 		if (RegularTable(relationId))
 		{
@@ -434,7 +495,8 @@ AppropriateReplicationModel(char distributionMethod, bool viaDeprecatedAPI)
 	{
 		return REPLICATION_MODEL_2PC;
 	}
-	else if (distributionMethod == DISTRIBUTE_BY_HASH)
+	else if (distributionMethod == DISTRIBUTE_BY_HASH || distributionMethod ==
+			 COORDINATOR_TABLE)
 	{
 		return ReplicationModel;
 	}
@@ -532,6 +594,11 @@ ColocationIdForNewTable(Oid relationId, Var *distributionColumn,
 	else if (distributionMethod == DISTRIBUTE_BY_NONE)
 	{
 		return CreateReferenceTableColocationId();
+	}
+	else if (distributionMethod == COORDINATOR_TABLE)
+	{
+		/* coordinator tables have no colocation id's for now */
+		return INVALID_COLOCATION_ID;
 	}
 	else
 	{
@@ -655,7 +722,7 @@ EnsureRelationCanBeDistributed(Oid relationId, Var *distributionColumn,
 	}
 
 	/* verify target relation is not distributed by a generated columns */
-	if (distributionMethod != DISTRIBUTE_BY_NONE &&
+	if (!CitusTableWithoutDistributionKey(distributionMethod) &&
 		DistributionColumnUsesGeneratedStoredColumn(relationDesc, distributionColumn))
 	{
 		ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -840,8 +907,8 @@ EnsureLocalTableEmptyIfNecessary(Oid relationId, char distributionMethod,
 
 	bool distributionMethodRequiresEmptyTable = (distributionMethod !=
 												 DISTRIBUTE_BY_HASH &&
-												 distributionMethod !=
-												 DISTRIBUTE_BY_NONE);
+												 !CitusTableWithoutDistributionKey(
+													 distributionMethod));
 	shouldEnsureLocalTableEmpty |= distributionMethodRequiresEmptyTable;
 
 	bool notRegularTable = !RegularTable(relationId);

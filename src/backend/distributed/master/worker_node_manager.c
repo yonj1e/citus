@@ -403,22 +403,17 @@ NodeIsPrimaryWorker(WorkerNode *node)
 
 
 /*
- * CoordinatorCanHaveNoDistributionKeyTablePlacements returns true if coordinator
- * can have no-distribution-key table placements, i.e reference tables & coordinator
- * tables.
+ * CoordinatorAddedAsWorkerNode returns true if coordinator is added to the
+ * pg_dist_node.
  */
 bool
-CoordinatorCanHaveNoDistributionKeyTablePlacements()
+CoordinatorAddedAsWorkerNode()
 {
-	bool hasNoDistributionKeyTablePlacements = false;
+	bool groupContainsNodes = false;
 
-	/*
-	 * All groups that have pg_dist_node entries, also have placements for
-	 * those tables.
-	 */
-	PrimaryNodeForGroup(COORDINATOR_GROUP_ID, &hasNoDistributionKeyTablePlacements);
+	PrimaryNodeForGroup(COORDINATOR_GROUP_ID, &groupContainsNodes);
 
-	return hasNoDistributionKeyTablePlacements;
+	return groupContainsNodes;
 }
 
 
@@ -432,6 +427,24 @@ ReferenceTablePlacementNodeList(LOCKMODE lockMode)
 {
 	EnsureModificationsCanRun();
 	return FilterActiveNodeListFunc(lockMode, NodeIsPrimary);
+}
+
+
+/*
+ * CoordinatorTablePlacementNodeList returns a single element list containing
+ * the coordinator node.
+ */
+List *
+CoordinatorTablePlacementNodeList(LOCKMODE lockMode)
+{
+	EnsureModificationsCanRun();
+
+	WorkerNode *coordinatorNode = LookupNodeForGroup(COORDINATOR_GROUP_ID);
+
+	WorkerNode *workerNodeCopy = palloc0(sizeof(WorkerNode));
+	*workerNodeCopy = *coordinatorNode;
+
+	return list_make1(workerNodeCopy);
 }
 
 
