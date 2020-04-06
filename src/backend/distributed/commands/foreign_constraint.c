@@ -76,11 +76,11 @@ ConstraintIsAForeignKeyToReferenceTable(char *constraintName, Oid relationId)
 			continue;
 		}
 
-		Oid referencedTableId = constraintForm->confrelid;
+		Oid referencedRelationOid = constraintForm->confrelid;
 
-		Assert(IsCitusTable(referencedTableId));
+		Assert(IsCitusTable(referencedRelationOid));
 
-		if (PartitionMethod(referencedTableId) == DISTRIBUTE_BY_NONE)
+		if (PartitionMethod(referencedRelationOid) == DISTRIBUTE_BY_NONE)
 		{
 			foreignKeyToReferenceTable = true;
 			break;
@@ -118,47 +118,42 @@ ConstraintIsAForeignKeyToReferenceTable(char *constraintName, Oid relationId)
  *   table is not a reference table.
  */
 void
-ErrorIfUnsupportedForeignConstraintExists(Relation relation, char referencingDistMethod,
+ErrorIfUnsupportedForeignConstraintExists(Relation referencingRelation,
+										  char referencingDistMethod,
 										  Var *referencingDistKey,
 										  uint32 referencingColocationId)
 {
 	ScanKeyData scanKey[1];
 	int scanKeyCount = 1;
 
-	Oid referencingTableId = relation->rd_id;
+	Oid referencingRelationOid = referencingRelation->rd_id;
 	bool referencingNotReplicated = true;
-	bool referencingIsCitus = IsCitusTable(referencingTableId);
+	bool referencingIsCitusTable = IsCitusTable(referencingRelationOid);
 
-	if (referencingIsCitus)
+	if (referencingIsCitusTable)
 	{
 		/* ALTER TABLE command is applied over single replicated table */
-		referencingNotReplicated = SingleReplicatedTable(referencingTableId);
+		referencingNotReplicated = SingleReplicatedTable(referencingRelationOid);
 	}
 	else
 	{
-		/* Creating single replicated table with foreign constraint */
+		/* creating single replicated table with foreign constraint */
 		referencingNotReplicated = (ShardReplicationFactor == 1);
 	}
 
 	Relation pgConstraint = heap_open(ConstraintRelationId, AccessShareLock);
 	ScanKeyInit(&scanKey[0], Anum_pg_constraint_conrelid, BTEqualStrategyNumber, F_OIDEQ,
-				relation->rd_id);
+				referencingRelation->rd_id);
 	SysScanDesc scanDescriptor = systable_beginscan(pgConstraint,
 													ConstraintRelidTypidNameIndexId,
 													true, NULL,
 													scanKeyCount, scanKey);
 
 	HeapTuple heapTuple = systable_getnext(scanDescriptor);
+
 	while (HeapTupleIsValid(heapTuple))
 	{
 		Form_pg_constraint constraintForm = (Form_pg_constraint) GETSTRUCT(heapTuple);
-
-		int referencingAttrIndex = -1;
-
-		char referencedDistMethod = 0;
-		Var *referencedDistKey = NULL;
-		int referencedAttrIndex = -1;
-		uint32 referencedColocationId = INVALID_COLOCATION_ID;
 
 		/* not a foreign key constraint, skip to next one */
 		if (constraintForm->contype != CONSTRAINT_FOREIGN)
@@ -167,12 +162,21 @@ ErrorIfUnsupportedForeignConstraintExists(Relation relation, char referencingDis
 			continue;
 		}
 
-		Oid referencedTableId = constraintForm->confrelid;
-		bool referencedIsCitus = IsCitusTable(referencedTableId);
+		Oid referencedRelationOid = constraintForm->confrelid;
 
-		bool selfReferencingTable = (referencingTableId == referencedTableId);
+		bool referencedIsCitusTable = IsCitusTable(referencedRelationOid);
+		bool selfReferencingTable = (referencingRelationOid == referencedRelationOid);
 
-		if (!referencedIsCitus && !selfReferencingTable)
+		/*
+		 * We cannot simply say the referenced table is a local table just
+		 * accroding to referencedIsCitusTable. This is because it can be
+		 * the case that we are just about to create the citus table itself
+		 * with a self-reference. At that point of time, referencing table is
+		 * also a local table from citus perspective.
+		 */
+		bool foreignKeyToLocalTable = !referencedIsCitusTable && !selfReferencingTable;
+
+		if (foreignKeyToLocalTable)
 		{
 			ereport(ERROR, (errcode(ERRCODE_INVALID_TABLE_DEFINITION),
 							errmsg("cannot create foreign key constraint"),
@@ -180,18 +184,26 @@ ErrorIfUnsupportedForeignConstraintExists(Relation relation, char referencingDis
 									  " or a reference table.")));
 		}
 
-		/* set referenced table related variables here if table is referencing itself */
+		/* at this point, referenced table is certainly a citus table */
 
+		char referencedDistMethod = 0;
+		Var *referencedDistKey = NULL;
+		uint32 referencedColocationId = INVALID_COLOCATION_ID;
+
+		/* set referenced table related variables here if table is referencing itself */
 		if (!selfReferencingTable)
 		{
-			referencedDistMethod = PartitionMethod(referencedTableId);
-			referencedDistKey = (referencedDistMethod == DISTRIBUTE_BY_NONE) ?
-								NULL :
-								DistPartitionKey(referencedTableId);
-			referencedColocationId = TableColocationId(referencedTableId);
+			referencedDistMethod = PartitionMethod(referencedRelationOid);
+			referencedDistKey = DistPartitionKey(referencedRelationOid);
+			referencedColocationId = TableColocationId(referencedRelationOid);
 		}
 		else
 		{
+			/*
+			 * We are just about to create the citus table (we have no cache
+			 * entry yet), hence we will set those below variables from given
+			 * parameters.
+			 */
 			referencedDistMethod = referencingDistMethod;
 			referencedDistKey = referencingDistKey;
 			referencedColocationId = referencingColocationId;
@@ -241,6 +253,9 @@ ErrorIfUnsupportedForeignConstraintExists(Relation relation, char referencingDis
 								"if it is referencing another colocated hash "
 								"distributed table or a reference table")));
 		}
+
+		int referencingAttrIndex = -1;
+		int referencedAttrIndex = -1;
 
 		ForeignConstraintFindDistKeys(heapTuple,
 									  referencingDistKey,
