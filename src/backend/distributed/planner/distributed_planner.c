@@ -2339,48 +2339,33 @@ HasUnresolvedExternParamsWalker(Node *expression, ParamListInfo boundParams)
 /*
  * QueryIsLocallyPlanable returns true if the query is locally planable, i.e
  * if it can skip distributed planner, which depends on the following conditions:
+ *
  *  - If query includes distributed tables, views or function, we cannot skip
  *    distributed planner.
  *  - If query includes reference tables, we allow it to skip distributed planner
- *    only when if it is replicated to coordinator and query is a simple join with
- *    a local table.
+ *    only when if it is replicated to coordinator and query is a simple join
+ *    with a local table.
+ *  - Otherwise, i.e we may only have coordinator tables and/or local tables in
+ *    the given query, we can safely skip distributed planner or error out for
+ *    the unsupported queries with coordinator tables.
  */
 static bool
 QueryIsLocallyPlanable(Query *parse, List *rangeTableList)
 {
-	/*
-	 * Check if we are in the coordinator and coordinator can have placements
-	 * for citus tables having no distribution key (i.e reference tables &
-	 * coordinator tables)
-	 */
-	if (!CanUseCoordinatorLocalTablesWithNoDistributionKeyTables())
-	{
-		return false;
-	}
-
 	bool hasReferenceTable = false;
 	bool hasLocalTable = false;
+	bool hasCoordinatorTable = false;
+	bool hasDistributedTable = false;
+	bool hasFunction = false;
+	bool hasView = false;
 
 	RangeTblEntry *rangeTableEntry = NULL;
 	foreach_ptr(rangeTableEntry, rangeTableList)
 	{
-		/*
-		 * Don't plan joins involving functions locally since we are not sure if
-		 * they do distributed accesses or not, and defaulting to local planning
-		 * might break transactional semantics.
-		 *
-		 * For example, access to the reference table in the function might go
-		 * over a connection, but access to the same reference table outside
-		 * the function will go over the current backend. The snapshot for the
-		 * connection in the function is taken after the statement snapshot,
-		 * so they can see two different views of data.
-		 *
-		 * Looking at gram.y, RTE_TABLEFUNC is used only for XMLTABLE() which
-		 * is okay to be planned locally, so allowing that.
-		 */
 		if (rangeTableEntry->rtekind == RTE_FUNCTION)
 		{
-			return false;
+			hasFunction = true;
+			continue;
 		}
 
 		if (rangeTableEntry->rtekind != RTE_RELATION)
@@ -2390,12 +2375,8 @@ QueryIsLocallyPlanable(Query *parse, List *rangeTableList)
 
 		if (rangeTableEntry->relkind == RELKIND_VIEW)
 		{
-			/*
-			 * We only allow local join for the relation kinds for which we
-			 * can determine if the access to them are local or distributed.
-			 * For this reason, we don't allow non-materialized views.
-			 */
-			return false;
+			hasView = true;
+			continue;
 		}
 
 		if (!IsCitusTable(rangeTableEntry->relid))
@@ -2411,21 +2392,93 @@ QueryIsLocallyPlanable(Query *parse, List *rangeTableList)
 		}
 		else if (distributionMethod == COORDINATOR_TABLE)
 		{
-			/*
-			 * Having coordinator tables in query does not affect if we should
-			 * skip distributed planner as we will replace them via placements
-			 * anyway.
-			 */
-			continue;
+			hasCoordinatorTable = true;
 		}
 		else
 		{
-			/*
-			 * If query includes a distributed table, we should not skip distributed
-			 * planner.
-			 */
-			return false;
+			hasDistributedTable = true;
 		}
+	}
+
+	bool hasNoDistKeyTableCoordinatorPlacements = (IsCoordinator() &&
+												   CoordinatorAddedAsWorkerNode());
+	bool queryIsNotSimpleSelect = FindNodeCheck((Node *) parse, QueryIsNotSimpleSelect);
+
+	/*
+	 * Actually, we will replace coordinator tables with their shards anyway
+	 * and as we will be threating them as local tables, we could error out
+	 * for the cases that we are not supporting local tables in planner.
+	 * However, error messages for those cases would print the placement name
+	 * of the coordinator table in that case. As that would seem to be a bit
+	 * weird, we will error out here for those unsupported cases with
+	 * coordinator tables.
+	 */
+	if (hasCoordinatorTable)
+	{
+		if (!hasNoDistKeyTableCoordinatorPlacements)
+		{
+			ereport(ERROR, (errmsg("citus can plan queries involving coordinator tables "
+								   "only via coordinator")));
+		}
+
+		if (hasDistributedTable)
+		{
+			/*
+			 * We do not support any queries including local tables & distributed
+			 * tables. We should error out here for those cases here as threating
+			 * coordinator tables as local tables.
+			 */
+			ereport(ERROR, (errmsg("cannot plan queries involving coordinator tables "
+								   "and distributed tables")));
+		}
+
+		if (hasReferenceTable && queryIsNotSimpleSelect)
+		{
+			/*
+			 * If query has reference table, we should error out if it is not
+			 * a simple select query. This is because, in that case, we will
+			 * not be able to replace reference table with its local shard
+			 * and planner would error out.
+			 */
+			ereport(ERROR, (errmsg("cannot plan modifications of coordinator tables "
+								   "involving reference tables and vice versa")));
+		}
+	}
+
+	if (hasDistributedTable)
+	{
+		/*
+		 * If query includes a distributed table, we should not skip distributed
+		 * planner.
+		 */
+		return false;
+	}
+	if (hasView)
+	{
+		/*
+		 * We only allow local join for the relation kinds for which we can
+		 * determine if the access to them are local or distributed. For this
+		 * reason, we don't allow non-materialized views.
+		 */
+		return false;
+	}
+	if (hasFunction)
+	{
+		/*
+		 * Don't plan joins involving functions locally since we are not sure if
+		 * they do distributed accesses or not, and defaulting to local planning
+		 * might break transactional semantics.
+		 *
+		 * For example, access to the reference table in the function might go
+		 * over a connection, but access to the same reference table outside
+		 * the function will go over the current backend. The snapshot for the
+		 * connection in the function is taken after the statement snapshot,
+		 * so they can see two different views of data.
+		 *
+		 * Looking at gram.y, RTE_TABLEFUNC is used only for XMLTABLE() which
+		 * is okay to be planned locally, so allowing that.
+		 */
+		return false;
 	}
 
 	/*
@@ -2435,20 +2488,21 @@ QueryIsLocallyPlanable(Query *parse, List *rangeTableList)
 
 	if (!hasReferenceTable)
 	{
-		/* we can only have local table or coordinator table in query */
+		/*
+		 * At this point, we can only have local table or coordinator table
+		 * in query.
+		 */
 		return true;
 	}
-	else
-	{
-		bool queryIsNotSimpleSelect = FindNodeCheck((Node *) parse,
-													QueryIsNotSimpleSelect);
 
-		/*
-		 * If query has reference table, we can skip distributed planner only
-		 * if it is a simple select query with a local table.
-		 */
-		return hasLocalTable && !queryIsNotSimpleSelect;
-	}
+	/*
+	 * If query has reference table, we can skip distributed planner only if:
+	 *  - it is a simple select query with a local table and
+	 *  - we are in the coordinator and
+	 *  - coordinator have reference table placements.
+	 */
+	return hasLocalTable && hasNoDistKeyTableCoordinatorPlacements &&
+		   !queryIsNotSimpleSelect;
 }
 
 
@@ -2485,11 +2539,12 @@ UpdateTablesWithoutDistKeysWithShards(Query *query, List *rangeTableList,
 	ExtractReferenceTableRTEList(rangeTableList, &referenceTableRTEList,
 								 &coordinatorTableRTEList);
 
-	if (list_length(coordinatorTableRTEList) > 0)
-	{
-		/* TODO: a better error could be given here */
-		EnsureCoordinator();
-	}
+	/*
+	 * If we any coordinator tables to replaced with their shards in the given
+	 * query, we must be in the coordinator node. Otherwise, we should have
+	 * already errored out in QueryIsLocallyPlanable function.
+	 */
+	Assert(coordinatorTableRTEList == NIL || IsCoordinator());
 
 	List *noDistributionKeyTableRTEList = NIL;
 	noDistributionKeyTableRTEList = list_concat(noDistributionKeyTableRTEList,
