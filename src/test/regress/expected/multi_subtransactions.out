@@ -424,12 +424,10 @@ WARNING:  SSL connection has been closed unexpectedly
 ERROR:  connection error: localhost:xxxxx
 ROLLBACK TO SAVEPOINT start;
 SELECT * FROM ref;
- a | b
----------------------------------------------------------------------
-(0 rows)
-
+WARNING:  connection error: localhost:xxxxx
+WARNING:  SSL connection has been closed unexpectedly
+ERROR:  connection error: localhost:xxxxx
 END;
-ERROR:  could not make changes to shard xxxxx on any node
 SELECT citus_start_test_worker(:worker_2_port);
  citus_start_test_worker
 ---------------------------------------------------------------------
