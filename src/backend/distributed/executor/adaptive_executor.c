@@ -2071,7 +2071,10 @@ ShouldRunTasksSequentially(List *taskList)
 	return false;
 }
 
-
+static List * GenerateColumnNameList(int count);
+static Query * CreateSubquery(List *rowValuesList,  List *colnames, TupleDesc ts);
+#include "distributed/citus_ruleutils.h"
+#include "distributed/commands/multi_copy.h"
 /*
  * SequentialRunDistributedExecution gets a distributed execution and
  * executes each individual task in the execution sequentially, one
@@ -2105,12 +2108,106 @@ SequentialRunDistributedExecution(DistributedExecution *execution)
 			break;
 		}
 
+		char *relationName = get_rel_name(taskToExecute->anchorDistributedTableId);
+		TupleDesc ts = RelationNameGetTupleDesc(relationName);
+
+		List *columnNameList = TupleDescColumnNameList(ts);
+		ListCell *columnNameCell = NULL;
+
+		/* wrap the column names as Values */
+		List *charName = NIL;
+		foreach(columnNameCell, columnNameList)
+		{
+			Value *columnName = (Value *) lfirst(columnNameCell);
+
+			charName = lappend(charName, strVal(columnName));
+		}
+
+		Query *q = CreateSubquery(taskToExecute->rowValuesLists, columnNameList, ts);
+//		StringInfo buf = makeStringInfo();
+//		deparse_shard_query(q, 0,  0, buf);
+//		elog(INFO, "%s", buf->data);
+		EState *estate = CreateExecutorState();
+
+
+
+
+
+		DestReceiver *copyDest =
+			(DestReceiver *) CreateCitusCopyDestReceiver(taskToExecute->anchorDistributedTableId,
+					charName,
+														 1,
+														 estate, true,
+														 NULL);
+		ExecuteQueryIntoDestReceiver(q, NULL, copyDest);
+		FreeExecutorState(estate);
+
 		/* simply call the regular execution function */
-		RunDistributedExecution(execution);
+		//RunDistributedExecution(execution);
 	}
 
 	/* set back the original execution mode */
 	MultiShardConnectionType = connectionMode;
+}
+
+#include "nodes/makefuncs.h"
+#include "parser/parse_relation.h"
+#include "distributed/multi_logical_optimizer.h"
+static List *
+GenerateColumnNameList(int count)
+{
+	List *l = NULL;
+	for (int i = 0; i < count; ++i)
+	{
+		l =  lappend(l, WorkerColumnName(i));
+	}
+
+	return l;
+}
+
+
+static Query *
+CreateSubquery(List *rowValuesList, List *colnames, TupleDesc ts)
+{
+	ParseState *pstate = make_parsestate(NULL);
+	Query *outerQuery = makeNode(Query);
+	outerQuery->commandType = CMD_SELECT;
+
+	/* create range table entries */
+	Alias *selectAlias = makeAlias("multi_row_insert", colnames);
+	RangeTblEntry *newRangeTableEntry = addRangeTableEntryForValues(pstate, rowValuesList,
+																	NIL, NIL, NIL, selectAlias, false,
+																	true);
+	outerQuery->rtable = list_make1(newRangeTableEntry);
+
+	/* set the FROM expression to the subquery */
+	RangeTblRef *newRangeTableRef = makeNode(RangeTblRef);
+	newRangeTableRef->rtindex = 1;
+	outerQuery->jointree = makeFromExpr(list_make1(newRangeTableRef), NULL);
+
+
+	ListCell *columnNameCell = NULL;
+	int colIndex = 0;
+	foreach(columnNameCell, colnames)
+	{
+		Value *columnName = (Value *) lfirst(columnNameCell);
+		Form_pg_attribute attr = TupleDescAttr(ts, colIndex);
+
+		/* Need the whole row as a junk var */
+		Var *targetColumn = makeVar(1, colIndex + 1,attr->atttypid, attr->atttypid, attr->attcollation, 0);
+
+		/* create a dummy target entry */
+		TargetEntry *targetEntry = makeTargetEntry((Expr *) targetColumn, colIndex + 1, strVal(columnName),
+												   false);
+
+		outerQuery->targetList = lappend(outerQuery->targetList, targetEntry);
+
+		colIndex++;
+	}
+
+
+
+	return outerQuery;
 }
 
 

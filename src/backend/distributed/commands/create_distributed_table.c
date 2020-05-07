@@ -105,7 +105,6 @@ static void EnsureLocalTableEmptyIfNecessary(Oid relationId, char distributionMe
 											 bool viaDepracatedAPI);
 static bool LocalTableEmpty(Oid tableId);
 static void CopyLocalDataIntoShards(Oid relationId);
-static List * TupleDescColumnNameList(TupleDesc tupleDescriptor);
 static bool RelationUsesIdentityColumns(TupleDesc relationDesc);
 static bool DistributionColumnUsesGeneratedStoredColumn(TupleDesc relationDesc,
 														Var *distributionColumn);
@@ -1367,7 +1366,7 @@ DoCopyFromLocalTableIntoShards(Relation distributedRelation,
  * TupleDescColumnNameList returns a list of column names for the given tuple
  * descriptor as plain strings.
  */
-static List *
+List *
 TupleDescColumnNameList(TupleDesc tupleDescriptor)
 {
 	List *columnNameList = NIL;
@@ -1386,7 +1385,7 @@ TupleDescColumnNameList(TupleDesc tupleDescriptor)
 			continue;
 		}
 
-		columnNameList = lappend(columnNameList, columnName);
+		columnNameList = lappend(columnNameList, makeString(columnName));
 	}
 
 	return columnNameList;
