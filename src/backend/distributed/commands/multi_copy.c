@@ -1415,7 +1415,7 @@ ColumnCoercionPaths(TupleDesc destTupleDescriptor, TupleDesc inputTupleDescripto
 		ConversionPathForTypes(inputTupleType, destTupleType,
 							   &coercePaths[columnIndex]);
 
-		currentColumnName = lnext(currentColumnName);
+		currentColumnName = lnext(columnNameList, currentColumnName);
 
 		if (currentColumnName == NULL)
 		{

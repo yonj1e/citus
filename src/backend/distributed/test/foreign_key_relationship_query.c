@@ -66,7 +66,7 @@ get_referencing_relation_id_list(PG_FUNCTION_ARGS)
 	{
 		Oid refId = lfirst_oid(foreignRelationCell);
 
-		functionContext->user_fctx = lnext(foreignRelationCell);
+		functionContext->user_fctx = lnext(functionContext->user_fctx, foreignRelationCell);
 
 		SRF_RETURN_NEXT(functionContext, PointerGetDatum(refId));
 	}
@@ -121,7 +121,7 @@ get_referenced_relation_id_list(PG_FUNCTION_ARGS)
 	{
 		Oid refId = lfirst_oid(foreignRelationCell);
 
-		functionContext->user_fctx = lnext(foreignRelationCell);
+		functionContext->user_fctx = lnext(functionContext->user_fctx, foreignRelationCell);
 
 		SRF_RETURN_NEXT(functionContext, PointerGetDatum(refId));
 	}

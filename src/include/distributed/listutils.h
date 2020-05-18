@@ -39,7 +39,7 @@
 	for (ListCell *(var ## CellDoNotUse) = list_head(l); \
 		 (var ## CellDoNotUse) != NULL && \
 		 (((var) = lfirst(var ## CellDoNotUse)) || true); \
-		 var ## CellDoNotUse = lnext(var ## CellDoNotUse))
+		 var ## CellDoNotUse = lnext(l, var ## CellDoNotUse))
 
 
 /*
@@ -52,7 +52,7 @@
 	for (ListCell *(var ## CellDoNotUse) = list_head(l); \
 		 (var ## CellDoNotUse) != NULL && \
 		 (((var) = lfirst_int(var ## CellDoNotUse)) || true); \
-		 var ## CellDoNotUse = lnext(var ## CellDoNotUse))
+		 var ## CellDoNotUse = lnext(l, var ## CellDoNotUse))
 
 
 /*
@@ -65,7 +65,7 @@
 	for (ListCell *(var ## CellDoNotUse) = list_head(l); \
 		 (var ## CellDoNotUse) != NULL && \
 		 (((var) = lfirst_oid(var ## CellDoNotUse)) || true); \
-		 var ## CellDoNotUse = lnext(var ## CellDoNotUse))
+		 var ## CellDoNotUse = lnext(l, var ## CellDoNotUse))
 
 
 /* utility functions declaration shared within this module */
