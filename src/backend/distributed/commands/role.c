@@ -33,6 +33,7 @@
 #include "distributed/coordinator_protocol.h"
 #include "distributed/metadata/distobject.h"
 #include "distributed/metadata_sync.h"
+#include "distributed/version_compat.h"
 #include "distributed/worker_transaction.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"

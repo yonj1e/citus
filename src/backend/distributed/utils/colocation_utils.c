@@ -29,6 +29,7 @@
 #include "distributed/pg_dist_colocation.h"
 #include "distributed/resource_lock.h"
 #include "distributed/shardinterval_utils.h"
+#include "distributed/version_compat.h"
 #include "distributed/worker_protocol.h"
 #include "distributed/worker_transaction.h"
 #include "storage/lmgr.h"

@@ -24,6 +24,14 @@
 #include "optimizer/optimizer.h"
 #endif
 
+#if PG_VERSION_NUM >= PG_VERSION_13
+#define heap_open(r, l)					table_open(r, l)
+#define heap_openrv(r, l)				table_openrv(r, l)
+#define heap_openrv_extended(r, l, m)	table_openrv_extended(r, l, m)
+#define heap_close(r, l)				table_close(r, l)
+#else /* pre PG13 */
+
+#endif
 #if PG_VERSION_NUM >= PG_VERSION_12
 
 #define MakeSingleTupleTableSlotCompat MakeSingleTupleTableSlot

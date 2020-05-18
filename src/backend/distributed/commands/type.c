@@ -64,6 +64,7 @@
 #include "distributed/remote_commands.h"
 #include "distributed/transaction_management.h"
 #include "distributed/worker_create_or_replace.h"
+#include "distributed/version_compat.h"
 #include "distributed/worker_manager.h"
 #include "distributed/worker_transaction.h"
 #include "miscadmin.h"

@@ -25,6 +25,7 @@
 #include "distributed/metadata/dependency.h"
 #include "distributed/metadata/distobject.h"
 #include "distributed/metadata_cache.h"
+#include "distributed/version_compat.h"
 #include "miscadmin.h"
 #include "utils/fmgroids.h"
 #include "utils/hsearch.h"

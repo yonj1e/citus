@@ -48,6 +48,7 @@
 #include "distributed/metadata_sync.h"
 #include "distributed/namespace_utils.h"
 #include "distributed/pg_dist_shard.h"
+#include "distributed/version_compat.h"
 #include "distributed/worker_manager.h"
 #include "foreign/foreign.h"
 #include "lib/stringinfo.h"

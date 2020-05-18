@@ -30,6 +30,7 @@
 #include "distributed/resource_lock.h"
 #include <distributed/remote_commands.h>
 #include <distributed/remote_commands.h>
+#include "distributed/version_compat.h"
 #include "nodes/parsenodes.h"
 #include "utils/fmgroids.h"
 #include "utils/lsyscache.h"

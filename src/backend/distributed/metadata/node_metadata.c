@@ -41,6 +41,7 @@
 #include "distributed/resource_lock.h"
 #include "distributed/shardinterval_utils.h"
 #include "distributed/shared_connection_stats.h"
+#include "distributed/version_compat.h"
 #include "distributed/worker_manager.h"
 #include "distributed/worker_transaction.h"
 #include "lib/stringinfo.h"

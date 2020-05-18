@@ -47,6 +47,7 @@
 #include "distributed/multi_executor.h"
 #include "distributed/namespace_utils.h"
 #include "distributed/relation_access_tracking.h"
+#include "distributed/version_compat.h"
 #include "distributed/worker_create_or_replace.h"
 #include "distributed/worker_transaction.h"
 #include "nodes/makefuncs.h"

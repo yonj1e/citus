@@ -31,6 +31,7 @@
 #include "distributed/metadata/distobject.h"
 #include "distributed/metadata/pg_dist_object.h"
 #include "distributed/metadata_cache.h"
+#include "distributed/version_compat.h"
 #include "executor/spi.h"
 #include "nodes/makefuncs.h"
 #include "nodes/pg_list.h"

@@ -34,6 +34,7 @@
 #include "distributed/local_executor.h"
 #include "distributed/local_multi_copy.h"
 #include "distributed/shard_utils.h"
+#include "distributed/version_compat.h"
 
 static int ReadFromLocalBufferCallback(void *outBuf, int minRead, int maxRead);
 static void AddSlotToBuffer(TupleTableSlot *slot, CitusCopyDestReceiver *copyDest,
