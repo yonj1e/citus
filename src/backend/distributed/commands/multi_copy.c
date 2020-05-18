@@ -751,18 +751,20 @@ static List *
 RemoveOptionFromList(List *optionList, char *optionName)
 {
 	ListCell *optionCell = NULL;
+	#if PG_VERSION_NUM < PG_VERSION_13
 	ListCell *previousCell = NULL;
-
+	#endif
 	foreach(optionCell, optionList)
 	{
 		DefElem *option = (DefElem *) lfirst(optionCell);
 
 		if (strncmp(option->defname, optionName, NAMEDATALEN) == 0)
 		{
-			return list_delete_cell(optionList, optionCell, previousCell);
+			return list_delete_cell_compat(optionList, optionCell, previousCell);
 		}
-
+		#if PG_VERSION_NUM < PG_VERSION_13
 		previousCell = optionCell;
+		#endif
 	}
 
 	return optionList;
@@ -1415,7 +1417,7 @@ ColumnCoercionPaths(TupleDesc destTupleDescriptor, TupleDesc inputTupleDescripto
 		ConversionPathForTypes(inputTupleType, destTupleType,
 							   &coercePaths[columnIndex]);
 
-		currentColumnName = lnext(columnNameList, currentColumnName);
+		currentColumnName = lnext_compat(columnNameList, currentColumnName);
 
 		if (currentColumnName == NULL)
 		{

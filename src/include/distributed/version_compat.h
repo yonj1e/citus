@@ -29,8 +29,11 @@
 #define heap_openrv(r, l)				table_openrv(r, l)
 #define heap_openrv_extended(r, l, m)	table_openrv_extended(r, l, m)
 #define heap_close(r, l)				table_close(r, l)
+#define lnext_compat(l, r) lnext(l, r)
+#define list_delete_cell_compat(l,c,p) list_delete_cell(l,c) 
 #else /* pre PG13 */
-
+#define lnext_compat(l, r) lnext(r)
+#define list_delete_cell_compat(l,c,p) list_delete_cell(l,c,p) 
 #endif
 #if PG_VERSION_NUM >= PG_VERSION_12
 
