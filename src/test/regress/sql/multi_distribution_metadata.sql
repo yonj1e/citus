@@ -279,8 +279,8 @@ SET citus.shard_count TO 2;
 CREATE TABLE events_table_count (user_id int, time timestamp, event_type int, value_2 int, value_3 float, value_4 bigint);
 SELECT create_distributed_table('events_table_count', 'user_id');
 
-CREATE TABLE users_table (user_id int, time timestamp, value_1 int, value_2 int, value_3 float, value_4 bigint);
-SELECT create_distributed_table('users_table', 'user_id');
+CREATE TABLE users_table_count (user_id int, time timestamp, value_1 int, value_2 int, value_3 float, value_4 bigint);
+SELECT create_distributed_table('users_table_count', 'user_id');
 
 SELECT relation_count_in_query($$-- we can support arbitrary subqueries within UNIONs
 SELECT ("final_query"."event_types") as types, count(*) AS sumOfEventType
