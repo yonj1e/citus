@@ -415,6 +415,7 @@ PreprocessAlterTableStmt(Node *node, const char *alterTableCommand)
 					 * transaction is in process, which causes deadlock.
 					 */
 					constraint->skip_validation = true;
+					ereport(ERROR, (errmsg("TEST WARNING")));
 					break;
 				}
 			}
