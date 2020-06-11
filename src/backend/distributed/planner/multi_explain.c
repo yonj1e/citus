@@ -221,6 +221,7 @@ NonPushableInsertSelectExplainScan(CustomScanState *node, List *ancestors,
 
 	bool repartition = distributedPlan->insertSelectMethod == INSERT_SELECT_REPARTITION;
 
+
 	if (es->analyze)
 	{
 		ereport(ERROR, (errmsg("EXPLAIN ANALYZE is currently not supported for INSERT "
@@ -313,7 +314,8 @@ ExplainSubPlans(DistributedPlan *distributedPlan, ExplainState *es)
 
 		INSTR_TIME_SET_ZERO(planduration);
 
-		ExplainOnePlanCompat(plan, into, es, queryString, params, NULL, &planduration, NULL);
+		ExplainOnePlanCompat(plan, into, es, queryString, params, NULL, &planduration,
+							 NULL);
 
 		if (es->format == EXPLAIN_FORMAT_TEXT)
 		{

@@ -135,7 +135,7 @@ typedef struct
 	ParseExprKind special_exprkind; /* set only for exprkinds needing special
 									 * handling */
 	Bitmapset  *appendparents;	/* if not null, map child Vars of these relids
-								 * back to the parent rel */								
+								 * back to the parent rel */
 } deparse_context;
 
 /*
@@ -2185,7 +2185,7 @@ get_simple_values_rte(Query *query, TupleDesc resultDesc)
 
 		if (list_length(query->targetList) != list_length(result->eref->colnames))
 			return NULL;		/* this probably cannot happen */
-		colno = 0;	
+		colno = 0;
 		forboth(lc, query->targetList, lcn, result->eref->colnames)
 		{
 			TargetEntry *tle = (TargetEntry *) lfirst(lc);
@@ -3554,7 +3554,7 @@ get_variable(Var *var, int levelsup, bool istoplevel, deparse_context *context)
 	if (var->varnosyn > 0 && var->varnosyn <= list_length(dpns->rtable) && dpns->plan == NULL) {
 		rte = rt_fetch(var->varnosyn, dpns->rtable);
 
-		// if the rte var->varnosync points to is not a regular table and it is a join 
+		// if the rte var->varnosync points to is not a regular table and it is a join
 		// then the correct relname will be found with var->varnosync and var->varattnosync
 		// TODO:: this is a workaround and it can be simplified.
 		if (rte->rtekind == RTE_JOIN && rte->relid == 0 && var->varnosyn != var->varno) {
@@ -3577,7 +3577,7 @@ get_variable(Var *var, int levelsup, bool istoplevel, deparse_context *context)
 		 */
 		if (context->appendparents && dpns->appendrels)
 		{
-			
+
 			Index		pvarno = varno;
 			AttrNumber	pvarattno = varattno;
 			AppendRelInfo *appinfo = dpns->appendrels[pvarno];
