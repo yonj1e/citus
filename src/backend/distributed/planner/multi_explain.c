@@ -957,7 +957,7 @@ worker_save_query_explain_analyze(PG_FUNCTION_ARGS)
 
 	INSTR_TIME_SET_CURRENT(planStart);
 
-	PlannedStmt *plan = pg_plan_query(query, 0, NULL);
+	PlannedStmt *plan = pg_plan_query_compat(query, NULL, 0, NULL);
 
 	INSTR_TIME_SET_CURRENT(planDuration);
 	INSTR_TIME_SUBTRACT(planDuration, planStart);
@@ -1122,14 +1122,14 @@ CitusExplainOneQuery(Query *query, int cursorOptions, IntoClause *into,
 	INSTR_TIME_SET_CURRENT(planstart);
 
 	/* plan the query */
-	PlannedStmt *plan = pg_plan_query(query, cursorOptions, params);
+	PlannedStmt *plan = pg_plan_query_compat(query, NULL, cursorOptions, params);
 
 	INSTR_TIME_SET_CURRENT(planduration);
 	INSTR_TIME_SUBTRACT(planduration, planstart);
 
 	/* run it (if needed) and produce output */
-	ExplainOnePlan(plan, into, es, queryString, params, queryEnv,
-				   &planduration);
+	ExplainOnePlanCompat(plan, into, es, queryString, params, queryEnv,
+						 &planduration, NULL);
 }
 
 
