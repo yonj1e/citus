@@ -813,9 +813,11 @@ deparse_index_columns(StringInfo buffer, List *indexParameterList, List *deparse
 							 NameListToQuotedString(indexElement->opclass));
 		}
 #if PG_VERSION_NUM >= PG_VERSION_13
-		if (indexElement->opclassopts != NIL) {
-			ereport(ERROR, errmsg("citus currently doesn't support this index arguments"));
-		} 
+		if (indexElement->opclassopts != NIL)
+		{
+			ereport(ERROR, errmsg(
+						"citus currently doesn't support this index arguments"));
+		}
 #endif
 
 		if (indexElement->ordering != SORTBY_DEFAULT)
