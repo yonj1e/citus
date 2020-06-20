@@ -83,6 +83,7 @@ SELECT * FROM ab WHERE (ROW(a,b)).f2 > (ROW(0,38)).f2 ORDER BY 1,2;
  20 | 40
 (1 row)
 
+-- test normalized
 CREATE TABLE text_table (name text);
 SELECT create_distributed_table('text_table', 'name');
  create_distributed_table
@@ -100,6 +101,7 @@ SELECT name IS NORMALIZED FROM text_table ORDER BY 1;
  t
 (2 rows)
 
+<<<<<<< HEAD
 SELECT is_normalized(name) FROM text_table ORDER BY 1;
  is_normalized
 ---------------------------------------------------------------------
@@ -115,6 +117,8 @@ SELECT normalize(name) FROM text_table ORDER BY 1;
 (2 rows)
 
 INSERT INTO text_table VALUES (normalize(U&'\0061\0308bc', NFC));
+=======
+>>>>>>> 96b3a00b8... Changelog: Test unicode escapes
 -- test unicode escape
 -- insert the word 'data' with unicode escapes
 INSERT INTO text_table VALUES(U&'d\0061t\+000061');
@@ -126,6 +130,7 @@ SELECT * FROM text_table ORDER BY 1;
  abc
  äbc
  data
+<<<<<<< HEAD
  äbc
  слон
 (5 rows)
@@ -162,6 +167,11 @@ SELECT create_distributed_table('test_table', 'a');
 -- we currently don't support this
 CREATE INDEX test_table_index ON test_table USING gist (b tsvector_ops(siglen = 100));
 ERROR:  citus currently doesn't support this index arguments
+=======
+ слон
+(4 rows)
+
+>>>>>>> 96b3a00b8... Changelog: Test unicode escapes
 drop schema test_pg13 cascade;
 NOTICE:  drop cascades to 5 other objects
 DETAIL:  drop cascades to table dist_table
