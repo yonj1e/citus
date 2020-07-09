@@ -480,9 +480,13 @@ FindTranslatedVar(List *appendRelList, Oid relationOid, Index relationRteIndex,
 bool
 RestrictionEquivalenceForPartitionKeys(PlannerRestrictionContext *restrictionContext)
 {
-	/* there is a single distributed relation, no need to continue */
-	if (!ContainsMultipleDistributedRelations(restrictionContext))
+	if (ContextContainsLocalRelation(restrictionContext->relationRestrictionContext))
 	{
+		return false;
+	}
+	else if (!ContainsMultipleDistributedRelations(restrictionContext))
+	{
+		/* there is a single distributed relation, no need to continue */
 		return true;
 	}
 
@@ -1801,7 +1805,8 @@ FilterPlannerRestrictionForQuery(PlannerRestrictionContext *plannerRestrictionCo
  */
 List *
 GetRestrictInfoListForRelation(RangeTblEntry *rangeTblEntry,
-							   PlannerRestrictionContext *plannerRestrictionContext)
+							   PlannerRestrictionContext *plannerRestrictionContext,
+							   int rteIndex)
 {
 	int rteIdentity = GetRTEIdentity(rangeTblEntry);
 	RelationRestrictionContext *relationRestrictionContext =
@@ -1822,6 +1827,7 @@ GetRestrictInfoListForRelation(RangeTblEntry *rangeTblEntry,
 
 	RelOptInfo *relOptInfo = relationRestriction->relOptInfo;
 	List *baseRestrictInfo = relOptInfo->baserestrictinfo;
+
 
 	List *restrictExprList = NIL;
 	ListCell *restrictCell = NULL;
@@ -1862,8 +1868,8 @@ GetRestrictInfoListForRelation(RangeTblEntry *rangeTblEntry,
 		{
 			Var *column = (Var *) lfirst(varClauseCell);
 
-			column->varno = 1;
-			column->varnoold = 1;
+			column->varno = rteIndex;
+			column->varnoold = rteIndex;
 		}
 
 		restrictExprList = lappend(restrictExprList, copyOfRestrictClause);
