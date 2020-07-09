@@ -412,7 +412,7 @@ FindTranslatedVar(List *appendRelList, Oid relationOid, Index relationRteIndex,
 		return NULL;
 	}
 
-	Var *relationPartitionKey = ForceDistPartitionKey(relationOid);
+	Var *relationPartitionKey = DistPartitionKeyOrError(relationOid);
 
 	List *translaterVars = targetAppendRelInfo->translated_vars;
 	foreach(translatedVarCell, translaterVars)
