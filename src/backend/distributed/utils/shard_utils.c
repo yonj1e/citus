@@ -42,19 +42,6 @@ GetTableLocalShardOid(Oid citusTableOid, uint64 shardId)
 
 
 /*
- * GetNoneDistTableLocalShardRelationId returns relation id for local shard of
- * DISTRIBUTE_BY_NONE table with noneDistTableId. Caller of this function must
- * ensure that and input relation has a local shard placement in current node.
- */
-Oid
-GetNoneDistTableLocalShardRelationId(Oid noneDistTableId)
-{
-	uint64 shardId = GetNoneDistTableShardId(noneDistTableId);
-	return GetTableLocalShardOid(noneDistTableId, shardId);
-}
-
-
-/*
  * GetNoneDistTableShardId takes noneDistTableId that identifies a DISTRIBUTE_BY_NONE
  * table and returns the shard id for its one and only shard.
  */
@@ -70,16 +57,4 @@ GetNoneDistTableShardId(Oid noneDistTableId)
 	uint64 shardId = shardInterval->shardId;
 
 	return shardId;
-}
-
-
-/*
- * AppendNoneDistTableShardIdToName appends shard id for DISTRIBUTE_BY_NONE
- * relation with noneDistTableId to "name" string.
- */
-void
-AppendNoneDistTableShardIdToName(Oid noneDistTableId, char **name)
-{
-	uint64 shardId = GetNoneDistTableShardId(noneDistTableId);
-	AppendShardIdToName(name, shardId);
 }
