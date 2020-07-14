@@ -1215,7 +1215,7 @@ ErrorIfCitusLocalTablePartitionCommand(AlterTableCmd *alterTableCmd, Oid parentR
 	}
 
 	bool isCitusLocalTablePartitionCommand = false;
-	if (IsCitusTable(parentRelationId) && IsCitusLocalTable(parentRelationId))
+	if (IsCitusLocalTable(parentRelationId))
 	{
 		isCitusLocalTablePartitionCommand = true;
 	}
@@ -1224,7 +1224,7 @@ ErrorIfCitusLocalTablePartitionCommand(AlterTableCmd *alterTableCmd, Oid parentR
 		bool missingOK = false;
 		Oid childRelationId = GetPartitionCommandChildRelationId(alterTableCmd,
 																 missingOK);
-		if (IsCitusTable(childRelationId) && IsCitusLocalTable(childRelationId))
+		if (IsCitusLocalTable(childRelationId))
 		{
 			isCitusLocalTablePartitionCommand = true;
 		}

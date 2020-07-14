@@ -874,6 +874,11 @@ InsertMetadataForCitusLocalTable(Oid citusLocalTableId, uint64 shardId)
 bool
 IsCitusLocalTable(Oid relationId)
 {
+	if (!IsCitusTable(relationId))
+	{
+		return false;
+	}
+
 	CitusTableCacheEntry *tableEntry = GetCitusTableCacheEntry(relationId);
 
 	if (tableEntry->partitionMethod != DISTRIBUTE_BY_NONE)
