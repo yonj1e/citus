@@ -333,7 +333,21 @@ ConvertLocalTableToShard(Oid relationId)
 	RenameRelationToShardRelation(relationId, shardId);
 	RenameShardRelationConstraints(relationId, shardId);
 	RenameShardRelationIndexes(relationId, shardId);
+
+	/*
+	 * We do not create truncate triggers on shard relation. This is
+	 * because truncate triggers are fired by utility hook and we would
+	 * need to disable them to prevent executing them twice if we don't
+	 * drop the trigger on shard relation.
+	 */
 	DropShardRelationTruncateTriggers(relationId);
+
+	/*
+	 * We create INSERT|DELETE|UPDATE triggers on shard relation too.
+	 * This is because citus prevents postgres executor to fire those
+	 * triggers. So, here we suffix such triggers on shard relation
+	 * with shardId.
+	 */
 	RenameShardRelationNonTruncateTriggers(relationId, shardId);
 
 	return shardId;
@@ -520,12 +534,6 @@ RenameShardRelationNonTruncateTriggers(Oid shardRelationId, uint64 shardId)
 		char *commandString = NULL;
 		if (!TRIGGER_FOR_TRUNCATE(triggerForm->tgtype))
 		{
-			/*
-			 * We create INSERT|DELETE|UPDATE triggers on shard relation too.
-			 * This is because citus prevents postgres executor to fire those
-			 * triggers. So, here we suffix such triggers on shard relation
-			 * with shardId.
-			 */
 			commandString = GetRenameShardTriggerCommand(shardRelationId, triggerName,
 														 shardId);
 			ExecuteAndLogDDLCommand(commandString);
@@ -579,12 +587,6 @@ DropShardRelationTruncateTriggers(Oid shardRelationId)
 		char *commandString = NULL;
 		if (TRIGGER_FOR_TRUNCATE(triggerForm->tgtype))
 		{
-			/*
-			 * We do not create truncate triggers on shard relation. This is
-			 * because truncate triggers are fired by utility hook and we would
-			 * need to disable them to prevent executing them twice if we don't
-			 * drop the trigger on shard relation.
-			 */
 			commandString = GetDropTriggerCommand(shardRelationId, triggerName);
 			ExecuteAndLogDDLCommand(commandString);
 		}

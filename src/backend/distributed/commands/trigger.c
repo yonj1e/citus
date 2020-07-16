@@ -403,8 +403,8 @@ IsCreateCitusTruncateTriggerStmt(CreateTrigStmt *createTriggerStmt)
 
 
 /*
- * CreateTriggerEventExtendNames extends relation name and trigger name name
- * with shardId, and sets schema name in given CreateTrigStmt.
+ * CreateTriggerEventExtendNames extends relation name and trigger name with
+ * shardId, and sets schema name in given CreateTrigStmt.
  */
 void
 CreateTriggerEventExtendNames(CreateTrigStmt *createTriggerStmt, char *schemaName,
