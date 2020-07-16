@@ -14,6 +14,5 @@
 #include "postgres.h"
 
 extern Oid GetTableLocalShardOid(Oid citusTableOid, uint64 shardId);
-extern uint64 GetNoneDistTableShardId(Oid noneDistTableId);
 
 #endif /* SHARD_UTILS_H */
