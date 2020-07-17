@@ -604,8 +604,17 @@ GetDropTriggerCommand(Oid relationId, char *triggerName)
 	char *qualifiedRelationName = generate_qualified_relation_name(relationId);
 	const char *quotedTriggerName = quote_identifier(triggerName);
 
+	/*
+	 * In postgres, the only possible object type that may depend on a trigger
+	 * is the "constraint" object implied by the trigger itself if it is a
+	 * constraint trigger, and it would be a internal dependency so it could
+	 * be dropped without using CASCADE. Other than this, it also possible to
+	 * define dependencies on trigger via recordDependencyOn api by other
+	 * extensions. We don't handle those kind of dependencies, we just drop
+	 * them with CASCADE.
+	 */
 	StringInfo dropCommand = makeStringInfo();
-	appendStringInfo(dropCommand, "DROP TRIGGER %s ON %s;",
+	appendStringInfo(dropCommand, "DROP TRIGGER %s ON %s CASCADE;",
 					 quotedTriggerName, qualifiedRelationName);
 
 	return dropCommand->data;
