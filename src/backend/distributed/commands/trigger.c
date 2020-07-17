@@ -565,6 +565,10 @@ GetAlterTriggerDependsTriggerNameValue(AlterObjectDependsStmt *alterTriggerDepen
  * PreprocessDropTriggerStmt is called before a DROP TRIGGER command has been
  * executed by standard process utility. This function errors out for
  * unsupported commands or creates ddl job for supported DROP TRIGGER commands.
+ * The reason we process drop trigger commands before standard process utility
+ * (unlike the other type of trigger commands) is that we act according to trigger
+ * type in CitusLocalTableTriggerCommandDDLJob but trigger wouldn't exist after
+ * standard process utility.
  */
 List *
 PreprocessDropTriggerStmt(Node *node, const char *commandString)

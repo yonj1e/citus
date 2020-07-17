@@ -196,7 +196,9 @@ SELECT * FROM citus_local_table_triggers;
 
 -- as we create ddl jobs for DROP TRIGGER before standard process utility,
 -- it's important to see that we properly handle non-existing triggers
+-- and relations
 DROP TRIGGER no_such_trigger ON "interesting!schema"."citus_local!_table";
+DROP TRIGGER no_such_trigger ON no_such_relation;
 
 ---------------------------------------
 -- a complex test case with triggers --
