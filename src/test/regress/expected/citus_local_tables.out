@@ -389,6 +389,54 @@ ERROR:  cannot create foreign key constraint since relations are not colocated o
 ALTER TABLE citus_local_table_1 ADD CONSTRAINT fkey_c_to_local FOREIGN KEY(a) references local_table(a);
 ERROR:  cannot create foreign key constraint
 ALTER TABLE local_table ADD CONSTRAINT fkey_local_to_c FOREIGN KEY(a) references citus_local_table_1(a);
+ALTER TABLE citus_local_table_1 ADD COLUMN b int NOT NULL;
+NOTICE:  executing the command locally: SELECT worker_apply_shard_ddl_command (1504027, 'citus_local_tables_test_schema', 'ALTER TABLE citus_local_table_1 ADD COLUMN b int NOT NULL;')
+-- show that we added column with NOT NULL
+SELECT table_name, column_name, is_nullable
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE table_name LIKE 'citus_local_table_1%' AND column_name = 'b'
+ORDER BY 1;
+         table_name          | column_name | is_nullable
+---------------------------------------------------------------------
+ citus_local_table_1         | b           | NO
+ citus_local_table_1_1504027 | b           | NO
+(2 rows)
+
+ALTER TABLE citus_local_table_1 ADD CONSTRAINT unique_a_b UNIQUE (a, b);
+NOTICE:  executing the command locally: SELECT worker_apply_shard_ddl_command (1504027, 'citus_local_tables_test_schema', 'ALTER TABLE citus_local_table_1 ADD CONSTRAINT unique_a_b UNIQUE (a, b);')
+-- show that we defined unique constraints
+SELECT conrelid::regclass, conname, conkey
+FROM pg_constraint
+WHERE conrelid::regclass::text LIKE 'citus_local_table_1%' AND contype = 'u'
+ORDER BY 1;
+          conrelid           |      conname       | conkey
+---------------------------------------------------------------------
+ citus_local_table_1_1504027 | unique_a_b_1504027 | {1,2}
+ citus_local_table_1         | unique_a_b         | {1,2}
+(2 rows)
+
+CREATE UNIQUE INDEX citus_local_table_1_idx ON citus_local_table_1(b);
+NOTICE:  executing the command locally: CREATE UNIQUE INDEX   citus_local_table_1_idx_1504027 ON citus_local_tables_test_schema.citus_local_table_1_1504027 USING btree (b )
+-- show that we successfully defined the unique index
+SELECT indexrelid::regclass, indrelid::regclass, indkey
+FROM pg_index
+WHERE indrelid::regclass::text LIKE 'citus_local_table_1%' AND indexrelid::regclass::text LIKE 'unique_a_b%'
+ORDER BY 1;
+     indexrelid     |          indrelid           | indkey
+---------------------------------------------------------------------
+ unique_a_b         | citus_local_table_1         | 1 2
+ unique_a_b_1504027 | citus_local_table_1_1504027 | 1 2
+(2 rows)
+
+-- execute truncate & drop commands for multiple relations to see that we don't break local execution
+TRUNCATE citus_local_table_1, citus_local_table_2, distributed_table, local_table, reference_table;
+NOTICE:  executing the command locally: TRUNCATE TABLE citus_local_tables_test_schema.citus_local_table_1_xxxxx CASCADE
+NOTICE:  executing the command locally: TRUNCATE TABLE citus_local_tables_test_schema.citus_local_table_2_xxxxx CASCADE
+NOTICE:  executing the command locally: TRUNCATE TABLE citus_local_tables_test_schema.reference_table_xxxxx CASCADE
+DROP TABLE citus_local_table_1, citus_local_table_2, distributed_table, local_table, reference_table;
+NOTICE:  executing the command locally: DROP TABLE IF EXISTS citus_local_tables_test_schema.reference_table_xxxxx CASCADE
+NOTICE:  executing the command locally: DROP TABLE IF EXISTS citus_local_tables_test_schema.citus_local_table_2_xxxxx CASCADE
+NOTICE:  executing the command locally: DROP TABLE IF EXISTS citus_local_tables_test_schema.citus_local_table_1_xxxxx CASCADE
 -- cleanup at exit
 DROP SCHEMA citus_local_tables_test_schema, "CiTUS!LocalTables" CASCADE;
-NOTICE:  drop cascades to 23 other objects
+NOTICE:  drop cascades to 15 other objects
