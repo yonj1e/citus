@@ -160,7 +160,7 @@ static DistributeObjectOps Any_CreateTrigger = {
 	.qualify = NULL,
 	.preprocess = NULL,
 	.postprocess = PostprocessCreateTriggerStmt,
-	.address = NULL,
+	.address = CreateTriggerStmtObjectAddress,
 };
 static DistributeObjectOps Any_Grant = {
 	.deparse = NULL,

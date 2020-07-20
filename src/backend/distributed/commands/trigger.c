@@ -27,6 +27,7 @@
 #include "distributed/commands.h"
 #include "distributed/commands/utility_hook.h"
 #include "distributed/create_citus_local_table.h"
+#include "distributed/deparser.h"
 #include "distributed/listutils.h"
 #include "distributed/metadata_cache.h"
 #include "distributed/namespace_utils.h"
@@ -283,12 +284,48 @@ PostprocessCreateTriggerStmt(Node *node, const char *queryString)
 
 	if (IsCitusLocalTable(relationId))
 	{
+		ObjectAddress objectAddress = GetObjectAddressFromParseTree(node, missingOk);
+		EnsureDependenciesExistOnAllNodes(&objectAddress);
+
 		char *triggerName = createTriggerStmt->trigname;
 		return CitusLocalTableTriggerCommandDDLJob(relationId, triggerName,
 												   queryString);
 	}
 
 	return NIL;
+}
+
+
+/*
+ * CreateTriggerStmtObjectAddress finds the ObjectAddress for the trigger that
+ * is created by given CreateTriggerStmt. If missingOk is false and if trigger
+ * does not exist, then it errors out.
+ *
+ * Never returns NULL, but the objid in the address can be invalid if missingOk
+ * was set to true.
+ */
+ObjectAddress
+CreateTriggerStmtObjectAddress(Node *node, bool missingOk)
+{
+	CreateTrigStmt *createTriggerStmt = castNode(CreateTrigStmt, node);
+
+	RangeVar *relation = createTriggerStmt->relation;
+	Oid relationId = RangeVarGetRelid(relation, CREATE_TRIGGER_LOCK_MODE, missingOk);
+
+	char *triggerName = createTriggerStmt->trigname;
+	Oid triggerId = get_trigger_oid(relationId, triggerName, missingOk);
+
+	if (triggerId == InvalidOid && missingOk == false)
+	{
+		char *relationName = get_rel_name(relationId);
+		ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT),
+						errmsg("trigger \"%s\" on relation \"%s\" does not exist",
+							   triggerName, relationName)));
+	}
+
+	ObjectAddress address = { 0 };
+	ObjectAddressSet(address, TriggerRelationId, triggerId);
+	return address;
 }
 
 
