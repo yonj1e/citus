@@ -40,6 +40,12 @@ s/ "citus_local_table_([0-9]+)_[0-9]+" / "citus_local_table_\1_xxxxxxx" /g
 # normalize relation oid suffix for the truncate triggers created by citus
 s/ truncate_trigger_[0-9]+ / truncate_trigger_xxxxxxx /g
 
+# (citus_table_triggers.sql)
+# postgres generates create trigger commands for triggers with:
+# "EXECUTE FUNCTION" in pg12
+# "EXECUTE PROCEDURE" in pg11
+s/FOR EACH (ROW|STATEMENT)(.*)EXECUTE PROCEDURE/FOR EACH \1\2EXECUTE FUNCTION/g
+
 # In foreign_key_restriction_enforcement, normalize shard names
 s/"(on_update_fkey_table_|fkey_)[0-9]+"/"\1xxxxxxx"/g
 
