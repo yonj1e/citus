@@ -41,6 +41,7 @@ test: multi_mx_call
 test: multi_mx_function_call_delegation
 test: multi_mx_modifications local_shard_execution
 test: local_shard_copy
+test: citus_local_table_triggers_mx
 test: multi_mx_transaction_recovery
 test: multi_mx_modifying_xacts
 test: multi_mx_explain
