@@ -32,7 +32,7 @@ BEGIN;
 
     CREATE TRIGGER insert_42_trigger
     AFTER DELETE ON citus_local_table
-    FOR EACH ROW EXECUTE PROCEDURE insert_42();
+    FOR EACH ROW EXECUTE FUNCTION insert_42();
 
     -- select should print two rows with "42" as delete from citus_local_table will
     -- insert 42 per deleted row
@@ -56,7 +56,7 @@ BEGIN;
 
     CREATE TRIGGER insert_100_trigger
     AFTER TRUNCATE ON citus_local_table
-    FOR EACH STATEMENT EXECUTE PROCEDURE insert_100();
+    FOR EACH STATEMENT EXECUTE FUNCTION insert_100();
 
     -- As TRUNCATE triggers are executed by utility hook, it's critical to see that they
     -- are executed only for once.
@@ -80,7 +80,7 @@ BEGIN;
 
     CREATE TRIGGER increment_value_trigger
     AFTER INSERT ON citus_local_table
-    FOR EACH ROW EXECUTE PROCEDURE increment_value();
+    FOR EACH ROW EXECUTE FUNCTION increment_value();
 
     -- insert initial data to the table that increment_value_trigger will execute for
     INSERT INTO local_table VALUES (0);
@@ -106,7 +106,7 @@ BEGIN;
 
     CREATE TRIGGER error_for_5_trigger
     BEFORE UPDATE OF value ON citus_local_table
-    FOR EACH ROW EXECUTE PROCEDURE error_for_5();
+    FOR EACH ROW EXECUTE FUNCTION error_for_5();
 
     -- below update will error out as trigger raises exception
     INSERT INTO citus_local_table VALUES (5);
@@ -138,7 +138,7 @@ $dummy_function$ LANGUAGE plpgsql;
 
 CREATE TRIGGER "trigger\'name"
 BEFORE INSERT ON "interesting!schema"."citus_local!_table"
-FOR EACH STATEMENT EXECUTE PROCEDURE dummy_function();
+FOR EACH STATEMENT EXECUTE FUNCTION dummy_function();
 
 BEGIN;
     CREATE EXTENSION seg;
@@ -172,7 +172,7 @@ SELECT * FROM citus_local_table_triggers;
 
 CREATE TRIGGER another_trigger
 AFTER DELETE ON "interesting!schema"."citus_local!_table"
-FOR EACH STATEMENT EXECUTE PROCEDURE dummy_function();
+FOR EACH STATEMENT EXECUTE FUNCTION dummy_function();
 
 ALTER TABLE "interesting!schema"."citus_local!_table" DISABLE TRIGGER USER;
 -- show that all triggers except the internal ones are disabled
@@ -198,7 +198,7 @@ SELECT * FROM citus_local_table_triggers;
 BEGIN;
     CREATE TRIGGER "another_trigger\'name"
     AFTER TRUNCATE ON "interesting!schema"."citus_local!_table"
-    FOR EACH STATEMENT EXECUTE PROCEDURE dummy_function();
+    FOR EACH STATEMENT EXECUTE FUNCTION dummy_function();
 
     ALTER TABLE "interesting!schema"."citus_local!_table" DISABLE TRIGGER "another_trigger\'name";
     -- show that our truncate trigger is disabled ..
@@ -240,11 +240,11 @@ $insert_100$ LANGUAGE plpgsql;
 BEGIN;
     CREATE TRIGGER insert_100_trigger
     AFTER TRUNCATE ON another_citus_local_table
-    FOR EACH STATEMENT EXECUTE PROCEDURE insert_100();
+    FOR EACH STATEMENT EXECUTE FUNCTION insert_100();
 
     CREATE TRIGGER insert_100_trigger
     AFTER TRUNCATE ON citus_local_table
-    FOR EACH STATEMENT EXECUTE PROCEDURE insert_100();
+    FOR EACH STATEMENT EXECUTE FUNCTION insert_100();
 
     TRUNCATE another_citus_local_table CASCADE;
     -- we should see two rows with "100"
@@ -259,11 +259,11 @@ BEGIN;
 
     CREATE TRIGGER insert_100_trigger
     AFTER UPDATE ON another_citus_local_table
-    FOR EACH STATEMENT EXECUTE PROCEDURE insert_100();
+    FOR EACH STATEMENT EXECUTE FUNCTION insert_100();
 
     CREATE TRIGGER insert_100_trigger
     AFTER UPDATE ON citus_local_table
-    FOR EACH STATEMENT EXECUTE PROCEDURE insert_100();
+    FOR EACH STATEMENT EXECUTE FUNCTION insert_100();
 
     UPDATE another_citus_local_table SET value=value-1;;
     -- we should see two rows with "100"

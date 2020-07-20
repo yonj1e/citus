@@ -140,7 +140,7 @@ BEGIN;
 
   CREATE TRIGGER insert_trigger
   AFTER INSERT ON citus_local_table_3
-  FOR EACH STATEMENT EXECUTE PROCEDURE update_value();
+  FOR EACH STATEMENT EXECUTE FUNCTION update_value();
 
   SELECT create_citus_local_table('citus_local_table_3');
 

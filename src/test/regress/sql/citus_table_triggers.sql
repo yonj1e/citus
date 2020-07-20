@@ -31,11 +31,11 @@ SELECT create_reference_table('reference_table');
 -- below two should fail
 CREATE TRIGGER update_value_dist
 AFTER INSERT ON distributed_table
-FOR EACH ROW EXECUTE PROCEDURE update_value();
+FOR EACH ROW EXECUTE FUNCTION update_value();
 
 CREATE TRIGGER update_value_ref
 AFTER INSERT ON reference_table
-FOR EACH ROW EXECUTE PROCEDURE update_value();
+FOR EACH ROW EXECUTE FUNCTION update_value();
 
 --------------------------------------------------------------------------------
 -- show that we error out for trigger commands on distributed & reference tables
@@ -46,11 +46,11 @@ SET citus.enable_ddl_propagation to OFF;
 -- create triggers when ddl propagation is off
 CREATE TRIGGER update_value_dist
 AFTER INSERT ON distributed_table
-FOR EACH ROW EXECUTE PROCEDURE update_value();
+FOR EACH ROW EXECUTE FUNCTION update_value();
 
 CREATE TRIGGER update_value_ref
 AFTER INSERT ON reference_table
-FOR EACH ROW EXECUTE PROCEDURE update_value();
+FOR EACH ROW EXECUTE FUNCTION update_value();
 
 -- enable ddl propagation back
 SET citus.enable_ddl_propagation to ON;
@@ -89,13 +89,13 @@ CREATE TABLE distributed_table_1 (value int);
 
 CREATE TRIGGER update_value_dist
 AFTER INSERT ON distributed_table_1
-FOR EACH ROW EXECUTE PROCEDURE update_value();
+FOR EACH ROW EXECUTE FUNCTION update_value();
 
 CREATE TABLE reference_table_1 (value int);
 
 CREATE TRIGGER update_value_ref
 AFTER INSERT ON reference_table_1
-FOR EACH ROW EXECUTE PROCEDURE update_value();
+FOR EACH ROW EXECUTE FUNCTION update_value();
 
 -- below two should fail
 SELECT create_distributed_table('distributed_table_1', 'value');
