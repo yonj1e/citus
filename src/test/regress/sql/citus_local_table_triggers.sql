@@ -191,8 +191,23 @@ ALTER TABLE "interesting!schema"."citus_local!_table" ENABLE TRIGGER ALL;
 SELECT * FROM citus_local_table_triggers;
 
 DROP TRIGGER another_trigger ON "interesting!schema"."citus_local!_table";
+DROP TRIGGER "trigger\'name22" ON "interesting!schema"."citus_local!_table";
 -- show that drop trigger works as expected
 SELECT * FROM citus_local_table_triggers;
+
+BEGIN;
+    CREATE TRIGGER "another_trigger\'name"
+    AFTER TRUNCATE ON "interesting!schema"."citus_local!_table"
+    FOR EACH STATEMENT EXECUTE PROCEDURE dummy_function();
+
+    ALTER TABLE "interesting!schema"."citus_local!_table" DISABLE TRIGGER "another_trigger\'name";
+    -- show that our truncate trigger is disabled ..
+    SELECT * FROM citus_local_table_triggers;
+
+    ALTER TABLE "interesting!schema"."citus_local!_table" ENABLE TRIGGER ALL;
+    -- .. and now it is enabled back
+    SELECT * FROM citus_local_table_triggers;
+ROLLBACK;
 
 -- as we create ddl jobs for DROP TRIGGER before standard process utility,
 -- it's important to see that we properly handle non-existing triggers

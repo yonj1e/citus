@@ -37,17 +37,26 @@
 #include "utils/syscache.h"
 
 
+/* appropriate lock modes for the owner relation according to postgres */
+#define CREATE_TRIGGER_LOCK_MODE ShareRowExclusiveLock
+#define ALTER_TRIGGER_LOCK_MODE AccessExclusiveLock
+#define DROP_TRIGGER_LOCK_MODE AccessExclusiveLock
+
+
 /* local function forward declarations */
-static void ErrorIfUnsupportedTriggerCommand(Node *parseTree, LOCKMODE lockMode);
-static RangeVar * GetDropTriggerStmtRelation(DropStmt *dropTriggerStmt);
 static bool IsCreateCitusTruncateTriggerStmt(CreateTrigStmt *createTriggerStmt);
+static void ErrorIfUnsupportedCreateTriggerCommand(CreateTrigStmt *createTriggerStmt);
+static void ErrorIfUnsupportedAlterTriggerRenameCommand(RenameStmt *renameTriggerStmt);
+static void ErrorIfUnsupportedAlterTriggerDependsCommand(AlterObjectDependsStmt *
+														 alterTriggerDependsStmt);
 static Value * GetAlterTriggerDependsTriggerNameValue(AlterObjectDependsStmt *
 													  alterTriggerDependsStmt);
+static void ErrorIfUnsupportedDropTriggerCommand(DropStmt *dropTriggerStmt);
+static RangeVar * GetDropTriggerStmtRelation(DropStmt *dropTriggerStmt);
 static void ExtractDropStmtTriggerAndRelationName(DropStmt *dropTriggerStmt,
 												  char **triggerName,
 												  char **relationName);
-static List * CitusLocalTableTriggerCommandDDLJob(Oid relationId, char *triggerName,
-												  const char *commandString);
+static void ErrorIfDropStmtDropsMultipleTriggers(DropStmt *dropTriggerStmt);
 static int16 GetTriggerTypeById(Oid triggerId);
 
 
@@ -106,20 +115,17 @@ GetExplicitTriggerNameList(Oid relationId)
 
 /*
  * GetTriggerNameById returns name of the trigger identified by triggerId if it
- * exists. Otherwise, returns NULL.
+ * exists. Otherwise, errors out.
  */
 char *
 GetTriggerNameById(Oid triggerId)
 {
-	char *triggerName = NULL;
+	bool missingOk = false;
+	HeapTuple triggerTuple = GetTriggerTupleById(triggerId, missingOk);
 
-	HeapTuple triggerTuple = GetTriggerTupleById(triggerId);
-	if (HeapTupleIsValid(triggerTuple))
-	{
-		Form_pg_trigger triggerForm = (Form_pg_trigger) GETSTRUCT(triggerTuple);
-		triggerName = pstrdup(NameStr(triggerForm->tgname));
-		heap_freetuple(triggerTuple);
-	}
+	Form_pg_trigger triggerForm = (Form_pg_trigger) GETSTRUCT(triggerTuple);
+	char *triggerName = pstrdup(NameStr(triggerForm->tgname));
+	heap_freetuple(triggerTuple);
 
 	return triggerName;
 }
@@ -127,10 +133,11 @@ GetTriggerNameById(Oid triggerId)
 
 /*
  * GetTriggerTupleById returns copy of the heap tuple from pg_trigger for
- * the trigger with triggerId.
+ * the trigger with triggerId. If no such trigger exists, this function returns
+ * NULL or errors out depending on missingOk.
  */
 HeapTuple
-GetTriggerTupleById(Oid triggerId)
+GetTriggerTupleById(Oid triggerId, bool missingOk)
 {
 	Relation pgTrigger = heap_open(TriggerRelationId, AccessShareLock);
 
@@ -161,6 +168,12 @@ GetTriggerTupleById(Oid triggerId)
 
 	systable_endscan(scanDescriptor);
 	heap_close(pgTrigger, NoLock);
+
+	if (targetHeapTuple == NULL && missingOk == false)
+	{
+		ereport(ERROR, (errmsg("could not find heap tuple for trigger with "
+							   "OID %d", triggerId)));
+	}
 
 	return targetHeapTuple;
 }
@@ -242,130 +255,26 @@ get_relation_trigger_oid_compat(HeapTuple heapTuple)
 
 
 /*
- * ErrorIfUnsupportedTriggerCommand errors out for unsupported CREATE/ALTER/DROP
- * trigger commands.
- */
-static void
-ErrorIfUnsupportedTriggerCommand(Node *parseTree, LOCKMODE lockMode)
-{
-	bool checkTableType = false;
-	RangeVar *relation = NULL;
-
-	if (IsA(parseTree, CreateTrigStmt))
-	{
-		/* CREATE TRIGGER triggerName ON relationName */
-
-		CreateTrigStmt *createTriggerStmt = castNode(CreateTrigStmt, parseTree);
-		if (!IsCreateCitusTruncateTriggerStmt(createTriggerStmt))
-		{
-			checkTableType = true;
-			relation = createTriggerStmt->relation;
-		}
-	}
-	else if (IsA(parseTree, RenameStmt))
-	{
-		/* ALTER TRIGGER oldName ON relationName RENAME TO newName */
-
-		RenameStmt *renameTriggerStmt = castNode(RenameStmt, parseTree);
-		if (renameTriggerStmt->renameType == OBJECT_TRIGGER)
-		{
-			checkTableType = true;
-			relation = renameTriggerStmt->relation;
-		}
-	}
-	else if (IsA(parseTree, AlterObjectDependsStmt))
-	{
-		/* ALTER TRIGGER triggerName ON relationName DEPENDS ON extensionName */
-
-		AlterObjectDependsStmt *alterTriggerDependsStmt =
-			castNode(AlterObjectDependsStmt, parseTree);
-		if (alterTriggerDependsStmt->objectType == OBJECT_TRIGGER)
-		{
-			checkTableType = true;
-			relation = alterTriggerDependsStmt->relation;
-		}
-	}
-	else if (IsA(parseTree, DropStmt))
-	{
-		/* DROP TRIGGER triggerName ON relationName */
-
-		DropStmt *dropTriggerStmt = castNode(DropStmt, parseTree);
-		if (dropTriggerStmt->removeType == OBJECT_TRIGGER)
-		{
-			checkTableType = true;
-			relation = GetDropTriggerStmtRelation(dropTriggerStmt);
-		}
-	}
-
-	if (!checkTableType)
-	{
-		return;
-	}
-
-	bool missingOk = false;
-	Oid relationId = RangeVarGetRelid(relation, lockMode, missingOk);
-
-	if (!IsCitusTable(relationId))
-	{
-		return;
-	}
-
-	if (!IsCitusLocalTable(relationId))
-	{
-		const char *relationName = relation->relname;
-		ereport(ERROR, (errmsg("cannot execute CREATE/ALTER/DROP trigger command for "
-							   "relation \"%s\" because it is either a distributed "
-							   "table or a reference table", relationName)));
-	}
-
-	EnsureCoordinator();
-}
-
-
-/*
- * GetDropTriggerStmtRelation takes a DropStmt for a trigger
- * object and returns RangeVar for the relation that owns the trigger.
- */
-static RangeVar *
-GetDropTriggerStmtRelation(DropStmt *dropTriggerStmt)
-{
-	Assert(dropTriggerStmt->removeType == OBJECT_TRIGGER);
-
-	List *targetObjectList = dropTriggerStmt->objects;
-
-	/* drop trigger commands can only drop one at a time */
-	Assert(list_length(targetObjectList) == 1);
-	List *triggerObjectNameList = linitial(targetObjectList);
-
-	List *relationNameList = NIL;
-	SplitLastPointerElement(triggerObjectNameList, &relationNameList, NULL);
-
-	return makeRangeVarFromNameList(relationNameList);
-}
-
-
-/*
  * PostprocessCreateTriggerStmt is called after a CREATE TRIGGER command has
  * been executed by standard process utility. This function errors out for
  * unsupported commands or creates ddl job for supported CREATE TRIGGER commands.
  */
 List *
-PostprocessCreateTriggerStmt(Node *node, const char *commandString)
+PostprocessCreateTriggerStmt(Node *node, const char *queryString)
 {
 	CreateTrigStmt *createTriggerStmt = castNode(CreateTrigStmt, node);
 
 	RangeVar *relation = createTriggerStmt->relation;
 
 	bool missingOk = false;
-	LOCKMODE lockMode = ShareRowExclusiveLock;
-	Oid relationId = RangeVarGetRelid(relation, lockMode, missingOk);
+	Oid relationId = RangeVarGetRelid(relation, CREATE_TRIGGER_LOCK_MODE, missingOk);
 
 	if (!IsCitusTable(relationId))
 	{
 		return NIL;
 	}
 
-	ErrorIfUnsupportedTriggerCommand((Node *) createTriggerStmt, lockMode);
+	ErrorIfUnsupportedCreateTriggerCommand(createTriggerStmt);
 
 	if (IsCreateCitusTruncateTriggerStmt(createTriggerStmt))
 	{
@@ -376,7 +285,7 @@ PostprocessCreateTriggerStmt(Node *node, const char *commandString)
 	{
 		char *triggerName = createTriggerStmt->trigname;
 		return CitusLocalTableTriggerCommandDDLJob(relationId, triggerName,
-												   commandString);
+												   queryString);
 	}
 
 	return NIL;
@@ -399,6 +308,33 @@ IsCreateCitusTruncateTriggerStmt(CreateTrigStmt *createTriggerStmt)
 	}
 
 	return false;
+}
+
+
+/*
+ * ErrorIfUnsupportedCreateTriggerCommand errors out for unsupported
+ * "CREATE TRIGGER triggerName ON relationName" commands.
+ */
+static void
+ErrorIfUnsupportedCreateTriggerCommand(CreateTrigStmt *createTriggerStmt)
+{
+	if (IsCreateCitusTruncateTriggerStmt(createTriggerStmt))
+	{
+		return;
+	}
+
+	RangeVar *relation = createTriggerStmt->relation;
+
+	bool missingOk = false;
+	Oid relationId = RangeVarGetRelid(relation, CREATE_TRIGGER_LOCK_MODE, missingOk);
+
+	if (!IsCitusTable(relationId))
+	{
+		return;
+	}
+
+	EnsureCoordinator();
+	ErrorIfTriggerCommandExecutedForUnsupportedCitusTable(relationId);
 }
 
 
@@ -430,7 +366,7 @@ CreateTriggerEventExtendNames(CreateTrigStmt *createTriggerStmt, char *schemaNam
  * RENAME commands.
  */
 List *
-PostprocessAlterTriggerRenameStmt(Node *node, const char *commandString)
+PostprocessAlterTriggerRenameStmt(Node *node, const char *queryString)
 {
 	RenameStmt *renameTriggerStmt = castNode(RenameStmt, node);
 	Assert(renameTriggerStmt->renameType == OBJECT_TRIGGER);
@@ -438,25 +374,46 @@ PostprocessAlterTriggerRenameStmt(Node *node, const char *commandString)
 	RangeVar *relation = renameTriggerStmt->relation;
 
 	bool missingOk = false;
-	LOCKMODE lockMode = AccessExclusiveLock;
-	Oid relationId = RangeVarGetRelid(relation, lockMode, missingOk);
+	Oid relationId = RangeVarGetRelid(relation, ALTER_TRIGGER_LOCK_MODE, missingOk);
 
 	if (!IsCitusTable(relationId))
 	{
 		return NIL;
 	}
 
-	ErrorIfUnsupportedTriggerCommand((Node *) renameTriggerStmt, lockMode);
+	ErrorIfUnsupportedAlterTriggerRenameCommand(renameTriggerStmt);
 
 	if (IsCitusLocalTable(relationId))
 	{
 		/* use newname as standard process utility already renamed it */
 		char *triggerName = renameTriggerStmt->newname;
 		return CitusLocalTableTriggerCommandDDLJob(relationId, triggerName,
-												   commandString);
+												   queryString);
 	}
 
 	return NIL;
+}
+
+
+/*
+ * ErrorIfUnsupportedAlterTriggerRenameCommand errors out for unsupported
+ * "ALTER TRIGGER oldName ON relationName RENAME TO newName" commands.
+ */
+static void
+ErrorIfUnsupportedAlterTriggerRenameCommand(RenameStmt *renameTriggerStmt)
+{
+	RangeVar *relation = renameTriggerStmt->relation;
+
+	bool missingOk = false;
+	Oid relationId = RangeVarGetRelid(relation, ALTER_TRIGGER_LOCK_MODE, missingOk);
+
+	if (!IsCitusTable(relationId))
+	{
+		return;
+	}
+
+	EnsureCoordinator();
+	ErrorIfTriggerCommandExecutedForUnsupportedCitusTable(relationId);
 }
 
 
@@ -493,7 +450,7 @@ AlterTriggerRenameEventExtendNames(RenameStmt *renameTriggerStmt, char *schemaNa
  * ON commands.
  */
 List *
-PostprocessAlterTriggerDependsStmt(Node *node, const char *commandString)
+PostprocessAlterTriggerDependsStmt(Node *node, const char *queryString)
 {
 	AlterObjectDependsStmt *alterTriggerDependsStmt =
 		castNode(AlterObjectDependsStmt, node);
@@ -502,25 +459,48 @@ PostprocessAlterTriggerDependsStmt(Node *node, const char *commandString)
 	RangeVar *relation = alterTriggerDependsStmt->relation;
 
 	bool missingOk = false;
-	LOCKMODE lockMode = AccessExclusiveLock;
-	Oid relationId = RangeVarGetRelid(relation, lockMode, missingOk);
+	Oid relationId = RangeVarGetRelid(relation, ALTER_TRIGGER_LOCK_MODE, missingOk);
 
 	if (!IsCitusTable(relationId))
 	{
 		return NIL;
 	}
 
-	ErrorIfUnsupportedTriggerCommand((Node *) alterTriggerDependsStmt, lockMode);
+	ErrorIfUnsupportedAlterTriggerDependsCommand(alterTriggerDependsStmt);
 
 	if (IsCitusLocalTable(relationId))
 	{
-		Value *triggerNameValue = GetAlterTriggerDependsTriggerNameValue(
-			alterTriggerDependsStmt);
+		Value *triggerNameValue =
+			GetAlterTriggerDependsTriggerNameValue(alterTriggerDependsStmt);
 		return CitusLocalTableTriggerCommandDDLJob(relationId, strVal(triggerNameValue),
-												   commandString);
+												   queryString);
 	}
 
 	return NIL;
+}
+
+
+/*
+ * ErrorIfUnsupportedAlterTriggerDependsCommand errors out for unsupported
+ * "ALTER TRIGGER triggerName ON relationName DEPENDS ON extensionName"
+ * commands.
+ */
+static void
+ErrorIfUnsupportedAlterTriggerDependsCommand(
+	AlterObjectDependsStmt *alterTriggerDependsStmt)
+{
+	RangeVar *relation = alterTriggerDependsStmt->relation;
+
+	bool missingOk = false;
+	Oid relationId = RangeVarGetRelid(relation, ALTER_TRIGGER_LOCK_MODE, missingOk);
+
+	if (!IsCitusTable(relationId))
+	{
+		return;
+	}
+
+	EnsureCoordinator();
+	ErrorIfTriggerCommandExecutedForUnsupportedCitusTable(relationId);
 }
 
 
@@ -539,8 +519,8 @@ AlterTriggerDependsEventExtendNames(AlterObjectDependsStmt *alterTriggerDependsS
 	char **relationName = &(relation->relname);
 	AppendShardIdToName(relationName, shardId);
 
-	Value *triggerNameValue = GetAlterTriggerDependsTriggerNameValue(
-		alterTriggerDependsStmt);
+	Value *triggerNameValue =
+		GetAlterTriggerDependsTriggerNameValue(alterTriggerDependsStmt);
 	AppendShardIdToName(&strVal(triggerNameValue), shardId);
 
 	char **relationSchemaName = &(relation->schemaname);
@@ -571,7 +551,7 @@ GetAlterTriggerDependsTriggerNameValue(AlterObjectDependsStmt *alterTriggerDepen
  * standard process utility.
  */
 List *
-PreprocessDropTriggerStmt(Node *node, const char *commandString)
+PreprocessDropTriggerStmt(Node *node, const char *queryString)
 {
 	DropStmt *dropTriggerStmt = castNode(DropStmt, node);
 	Assert(dropTriggerStmt->removeType == OBJECT_TRIGGER);
@@ -579,8 +559,7 @@ PreprocessDropTriggerStmt(Node *node, const char *commandString)
 	RangeVar *relation = GetDropTriggerStmtRelation(dropTriggerStmt);
 
 	bool missingOk = true;
-	LOCKMODE lockMode = AccessExclusiveLock;
-	Oid relationId = RangeVarGetRelid(relation, lockMode, missingOk);
+	Oid relationId = RangeVarGetRelid(relation, DROP_TRIGGER_LOCK_MODE, missingOk);
 
 	if (!OidIsValid(relationId))
 	{
@@ -593,17 +572,80 @@ PreprocessDropTriggerStmt(Node *node, const char *commandString)
 		return NIL;
 	}
 
-	ErrorIfUnsupportedTriggerCommand((Node *) dropTriggerStmt, lockMode);
+	ErrorIfUnsupportedDropTriggerCommand(dropTriggerStmt);
 
 	if (IsCitusLocalTable(relationId))
 	{
 		char *triggerName = NULL;
 		ExtractDropStmtTriggerAndRelationName(dropTriggerStmt, &triggerName, NULL);
 		return CitusLocalTableTriggerCommandDDLJob(relationId, triggerName,
-												   commandString);
+												   queryString);
 	}
 
 	return NIL;
+}
+
+
+/*
+ * ErrorIfUnsupportedDropTriggerCommand errors out for unsupported
+ * "DROP TRIGGER triggerName ON relationName" commands.
+ */
+static void
+ErrorIfUnsupportedDropTriggerCommand(DropStmt *dropTriggerStmt)
+{
+	RangeVar *relation = GetDropTriggerStmtRelation(dropTriggerStmt);
+
+	bool missingOk = false;
+	Oid relationId = RangeVarGetRelid(relation, DROP_TRIGGER_LOCK_MODE, missingOk);
+
+	if (!IsCitusTable(relationId))
+	{
+		return;
+	}
+
+	EnsureCoordinator();
+	ErrorIfTriggerCommandExecutedForUnsupportedCitusTable(relationId);
+}
+
+
+/*
+ * ErrorIfTriggerCommandExecutedForUnsupportedCitusTable is an helper function
+ * to error out for unsupported trigger commands depending on the citus table
+ * type.
+ */
+void
+ErrorIfTriggerCommandExecutedForUnsupportedCitusTable(Oid relationId)
+{
+	if (IsCitusLocalTable(relationId))
+	{
+		return;
+	}
+
+	char *relationName = get_rel_name(relationId);
+	ereport(ERROR, (errmsg("cannot execute command on table \"%s\" because "
+						   "triggers are not supported for distributed and "
+						   "reference tables", relationName)));
+}
+
+
+/*
+ * GetDropTriggerStmtRelation takes a DropStmt for a trigger
+ * object and returns RangeVar for the relation that owns the trigger.
+ */
+static RangeVar *
+GetDropTriggerStmtRelation(DropStmt *dropTriggerStmt)
+{
+	Assert(dropTriggerStmt->removeType == OBJECT_TRIGGER);
+
+	ErrorIfDropStmtDropsMultipleTriggers(dropTriggerStmt);
+
+	List *targetObjectList = dropTriggerStmt->objects;
+	List *triggerObjectNameList = linitial(targetObjectList);
+
+	List *relationNameList = NIL;
+	SplitLastPointerElement(triggerObjectNameList, &relationNameList, NULL);
+
+	return makeRangeVarFromNameList(relationNameList);
 }
 
 
@@ -643,10 +685,9 @@ static void
 ExtractDropStmtTriggerAndRelationName(DropStmt *dropTriggerStmt, char **triggerName,
 									  char **relationName)
 {
-	List *targetObjectList = dropTriggerStmt->objects;
+	ErrorIfDropStmtDropsMultipleTriggers(dropTriggerStmt);
 
-	/* drop trigger commands can only drop one at a time */
-	Assert(list_length(targetObjectList) == 1);
+	List *targetObjectList = dropTriggerStmt->objects;
 	List *triggerObjectNameList = linitial(targetObjectList);
 
 	List *relationNameList = NIL;
@@ -668,25 +709,53 @@ ExtractDropStmtTriggerAndRelationName(DropStmt *dropTriggerStmt, char **triggerN
 
 
 /*
- * CitusLocalTableTriggerCommandDDLJob creates a ddl job to execute given
- * commandString on shell relation(s) in mx worker(s) and to execute necessary
- * ddl task on citus local table shard (if needed).
+ * ErrorIfDropStmtDropsMultipleTriggers errors out if given drop trigger command
+ * drops more than one triggers. Actually, this can't be the case as postgres
+ * doesn't support dropping multiple triggers, but we should be on the safe side.
  */
-static List *
+static void
+ErrorIfDropStmtDropsMultipleTriggers(DropStmt *dropTriggerStmt)
+{
+	List *targetObjectList = dropTriggerStmt->objects;
+	if (list_length(targetObjectList) > 1)
+	{
+		ereport(ERROR, (errmsg("bug: cannot execute DROP TRIGGER command "
+							   "for multiple triggers")));
+	}
+}
+
+
+/*
+ * CitusLocalTableTriggerCommandDDLJob creates a ddl job to execute given
+ * queryString trigger command on shell relation(s) in mx worker(s) and to
+ * execute necessary ddl task on citus local table shard (if needed).
+ */
+List *
 CitusLocalTableTriggerCommandDDLJob(Oid relationId, char *triggerName,
-									const char *commandString)
+									const char *queryString)
 {
 	DDLJob *ddlJob = palloc0(sizeof(DDLJob));
 	ddlJob->targetRelationId = relationId;
-	ddlJob->commandString = commandString;
+	ddlJob->commandString = queryString;
+
+	if (!triggerName)
+	{
+		/*
+		 * ENABLE/DISABLE TRIGGER ALL/USER commands does not specify trigger
+		 * name.
+		 */
+		ddlJob->taskList = DDLTaskList(relationId, queryString);
+		return list_make1(ddlJob);
+	}
 
 	bool missingOk = true;
 	Oid triggerId = get_trigger_oid(relationId, triggerName, missingOk);
 	if (!OidIsValid(triggerId))
 	{
 		/*
-		 * We create ddl job for drop trigger commands in preprocess, so trigger
-		 * may not exist.
+		 * For DROP, ENABLE/DISABLE, ENABLE REPLICA/ALWAYS TRIGGER commands,
+		 * we create ddl job for below commands in preprocess. So trigger may
+		 * not exist.
 		 */
 		return NIL;
 	}
@@ -695,7 +764,7 @@ CitusLocalTableTriggerCommandDDLJob(Oid relationId, char *triggerName,
 	int16 triggerType = GetTriggerTypeById(triggerId);
 	if (!TRIGGER_FOR_TRUNCATE(triggerType))
 	{
-		ddlJob->taskList = DDLTaskList(relationId, commandString);
+		ddlJob->taskList = DDLTaskList(relationId, queryString);
 	}
 
 	return list_make1(ddlJob);
@@ -704,22 +773,17 @@ CitusLocalTableTriggerCommandDDLJob(Oid relationId, char *triggerName,
 
 /*
  * GetTriggerTypeById returns trigger type (tgtype) of the trigger identified
- * by triggerId. Returns the value set by TRIGGER_CLEAR_TYPE if no such trigger
- * exists.
+ * by triggerId if it exists. Otherwise, errors out.
  */
 static int16
 GetTriggerTypeById(Oid triggerId)
 {
-	int16 triggerType;
-	TRIGGER_CLEAR_TYPE(triggerType);
+	bool missingOk = false;
+	HeapTuple triggerTuple = GetTriggerTupleById(triggerId, missingOk);
 
-	HeapTuple triggerTuple = GetTriggerTupleById(triggerId);
-	if (HeapTupleIsValid(triggerTuple))
-	{
-		Form_pg_trigger triggerForm = (Form_pg_trigger) GETSTRUCT(triggerTuple);
-		triggerType = triggerForm->tgtype;
-		heap_freetuple(triggerTuple);
-	}
+	Form_pg_trigger triggerForm = (Form_pg_trigger) GETSTRUCT(triggerTuple);
+	int16 triggerType = triggerForm->tgtype;
+	heap_freetuple(triggerTuple);
 
 	return triggerType;
 }

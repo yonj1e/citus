@@ -51,7 +51,7 @@ static char * GetRenameShardIndexCommand(char *indexName, uint64 shardId);
 static void RenameShardRelationNonTruncateTriggers(Oid shardRelationId, uint64 shardId);
 static char * GetRenameShardTriggerCommand(Oid shardRelationId, char *triggerName,
 										   uint64 shardId);
-static void DropShardRelationTruncateTriggers(Oid shardRelationId);
+static void DropRelationTruncateTriggers(Oid relationId);
 static char * GetDropTriggerCommand(Oid relationId, char *triggerName);
 static List * GetExplicitIndexNameList(Oid relationId);
 static void CreateCitusLocalTable(Oid relationId);
@@ -340,7 +340,7 @@ ConvertLocalTableToShard(Oid relationId)
 	 * need to disable them to prevent executing them twice if we don't
 	 * drop the trigger on shard relation.
 	 */
-	DropShardRelationTruncateTriggers(relationId);
+	DropRelationTruncateTriggers(relationId);
 
 	/*
 	 * We create INSERT|DELETE|UPDATE triggers on shard relation too.
@@ -525,9 +525,8 @@ RenameShardRelationNonTruncateTriggers(Oid shardRelationId, uint64 shardId)
 	Oid triggerId = InvalidOid;
 	foreach_oid(triggerId, triggerIdList)
 	{
-		HeapTuple triggerTuple = GetTriggerTupleById(triggerId);
-
-		Assert(HeapTupleIsValid(triggerTuple));
+		bool missingOk = false;
+		HeapTuple triggerTuple = GetTriggerTupleById(triggerId, missingOk);
 		Form_pg_trigger triggerForm = (Form_pg_trigger) GETSTRUCT(triggerTuple);
 
 		char *triggerName = NameStr(triggerForm->tgname);
@@ -567,27 +566,26 @@ GetRenameShardTriggerCommand(Oid shardRelationId, char *triggerName, uint64 shar
 
 
 /*
- * DropShardRelationTruncateTriggers drops TRUNCATE triggers that are explicitly
- * created.
+ * DropRelationTruncateTriggers drops TRUNCATE triggers that are explicitly
+ * created on relation with relationId.
  */
 static void
-DropShardRelationTruncateTriggers(Oid shardRelationId)
+DropRelationTruncateTriggers(Oid relationId)
 {
-	List *triggerIdList = GetExplicitTriggerIdList(shardRelationId);
+	List *triggerIdList = GetExplicitTriggerIdList(relationId);
 
 	Oid triggerId = InvalidOid;
 	foreach_oid(triggerId, triggerIdList)
 	{
-		HeapTuple triggerTuple = GetTriggerTupleById(triggerId);
-
-		Assert(HeapTupleIsValid(triggerTuple));
+		bool missingOk = false;
+		HeapTuple triggerTuple = GetTriggerTupleById(triggerId, missingOk);
 		Form_pg_trigger triggerForm = (Form_pg_trigger) GETSTRUCT(triggerTuple);
 
 		char *triggerName = NameStr(triggerForm->tgname);
 		char *commandString = NULL;
 		if (TRIGGER_FOR_TRUNCATE(triggerForm->tgtype))
 		{
-			commandString = GetDropTriggerCommand(shardRelationId, triggerName);
+			commandString = GetDropTriggerCommand(relationId, triggerName);
 			ExecuteAndLogDDLCommand(commandString);
 		}
 	}

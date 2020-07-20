@@ -258,8 +258,6 @@ extern List * MakeNameListFromRangeVar(const RangeVar *rel);
 
 /* truncate.c - forward declarations */
 extern void PreprocessTruncateStatement(TruncateStmt *truncateStatement);
-extern void DisableTruncateTriggersIfNecessary(TruncateStmt *truncateStatement);
-extern void RevertTruncateTriggersEnableDisableStates(void);
 
 /* type.c - forward declarations */
 extern List * PreprocessCompositeTypeStmt(Node *stmt, const char *queryString);
@@ -302,23 +300,25 @@ extern void PostprocessVacuumStmt(VacuumStmt *vacuumStmt, const char *vacuumComm
 extern List * GetExplicitTriggerCommandList(Oid relationId);
 extern List * GetExplicitTriggerNameList(Oid relationId);
 extern char * GetTriggerNameById(Oid triggerId);
-extern HeapTuple GetTriggerTupleById(Oid triggerId);
+extern HeapTuple GetTriggerTupleById(Oid triggerId, bool missingOk);
 extern List * GetExplicitTriggerIdList(Oid relationId);
 extern Oid get_relation_trigger_oid_compat(HeapTuple heapTuple);
-extern void ErrorIfUnsupportedCreateTriggerCommand(CreateTrigStmt *createTriggerStmt);
-extern List * PostprocessCreateTriggerStmt(Node *node, const char *commandString);
+extern List * PostprocessCreateTriggerStmt(Node *node, const char *queryString);
 extern void CreateTriggerEventExtendNames(CreateTrigStmt *createTriggerStmt,
 										  char *schemaName, uint64 shardId);
-extern List * PostprocessAlterTriggerRenameStmt(Node *node, const char *commandString);
+extern List * PostprocessAlterTriggerRenameStmt(Node *node, const char *queryString);
 extern void AlterTriggerRenameEventExtendNames(RenameStmt *renameTriggerStmt,
 											   char *schemaName, uint64 shardId);
-extern List * PostprocessAlterTriggerDependsStmt(Node *node, const char *commandString);
+extern List * PostprocessAlterTriggerDependsStmt(Node *node, const char *queryString);
 extern void AlterTriggerDependsEventExtendNames(
 	AlterObjectDependsStmt *alterTriggerDependsStmt,
 	char *schemaName, uint64 shardId);
-extern List * PreprocessDropTriggerStmt(Node *node, const char *commandString);
+extern List * PreprocessDropTriggerStmt(Node *node, const char *queryString);
+extern void ErrorIfTriggerCommandExecutedForUnsupportedCitusTable(Oid relationId);
 extern void DropTriggerEventExtendNames(DropStmt *dropTriggerStmt, char *schemaName,
 										uint64 shardId);
+extern List * CitusLocalTableTriggerCommandDDLJob(Oid relationId, char *triggerName,
+												  const char *queryString);
 
 extern bool ShouldPropagateSetCommand(VariableSetStmt *setStmt);
 extern void PostprocessVariableSetStmt(VariableSetStmt *setStmt, const char *setCommand);

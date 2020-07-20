@@ -1,6 +1,7 @@
 -- This test file includes tests to show that we do not allow triggers
--- on citus tables. Note that in other regression tests, we already test
--- the successfull citus table creation cases.
+-- on distributed tables and reference tables. Note that in other
+-- regression tests, we already test the successfull citus table
+-- creation cases.
 
 \set VERBOSITY terse
 

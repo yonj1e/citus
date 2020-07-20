@@ -43,6 +43,7 @@
 
 
 /* Local functions forward declarations for unsupported command checks */
+static bool AlterTableCommandTypeIsTrigger(AlterTableType alterTableType);
 static void ErrorIfUnsupportedAlterTableStmt(AlterTableStmt *alterTableStatement);
 static void ErrorIfCitusLocalTablePartitionCommand(AlterTableCmd *alterTableCmd,
 												   Oid parentRelationId);
@@ -458,6 +459,18 @@ PreprocessAlterTableStmt(Node *node, const char *alterTableCommand)
 
 			rightRelationId = RangeVarGetRelid(partitionCommand->name, NoLock, false);
 		}
+		else if (AlterTableCommandTypeIsTrigger(alterTableType))
+		{
+			/*
+			 * We already error'ed out for ENABLE/DISABLE trigger commands for
+			 * other citus table types in ErrorIfUnsupportedAlterTableStmt.
+			 */
+			Assert(IsCitusLocalTable(leftRelationId));
+
+			char *triggerName = command->name;
+			return CitusLocalTableTriggerCommandDDLJob(leftRelationId, triggerName,
+													   alterTableCommand);
+		}
 
 		/*
 		 * We check and set the execution mode only if we fall into either of first two
@@ -501,6 +514,33 @@ PreprocessAlterTableStmt(Node *node, const char *alterTableCommand)
 	List *ddlJobs = list_make1(ddlJob);
 
 	return ddlJobs;
+}
+
+
+/*
+ * AlterTableCommandTypeIsTrigger returns true if given alter table command type
+ * is identifies an ALTER TABLE .. TRIGGER .. command.
+ */
+static bool
+AlterTableCommandTypeIsTrigger(AlterTableType alterTableType)
+{
+	switch (alterTableType)
+	{
+		case AT_EnableTrig:
+		case AT_EnableAlwaysTrig:
+		case AT_EnableReplicaTrig:
+		case AT_EnableTrigUser:
+		case AT_DisableTrig:
+		case AT_DisableTrigUser:
+		case AT_EnableTrigAll:
+		case AT_DisableTrigAll:
+		{
+			return true;
+		}
+
+		default:
+			return false;
+	}
 }
 
 
@@ -1153,6 +1193,17 @@ ErrorIfUnsupportedAlterTableStmt(AlterTableStmt *alterTableStatement)
 			case AT_EnableTrigAll:
 			case AT_DisableTrigAll:
 			{
+				/*
+				 * Postgres already does not allow executing ALTER TABLE TRIGGER
+				 * commands with other subcommands, but let's be on the safe side.
+				 */
+				if (commandList->length > 1)
+				{
+					ereport(ERROR, (errmsg("bug: cannot execute ENABLE/DISABLE TRIGGER "
+										   "command with other subcommands"),
+									errhint("You can issue each subcommand separately")));
+				}
+
 				if (!IsCitusLocalTable(relationId))
 				{
 					const char *relationName = alterTableStatement->relation->relname;
@@ -1214,23 +1265,9 @@ ErrorIfCitusLocalTablePartitionCommand(AlterTableCmd *alterTableCmd, Oid parentR
 		return;
 	}
 
-	bool isCitusLocalTablePartitionCommand = false;
-	if (IsCitusLocalTable(parentRelationId))
-	{
-		isCitusLocalTablePartitionCommand = true;
-	}
-	else
-	{
-		bool missingOK = false;
-		Oid childRelationId = GetPartitionCommandChildRelationId(alterTableCmd,
-																 missingOK);
-		if (IsCitusLocalTable(childRelationId))
-		{
-			isCitusLocalTablePartitionCommand = true;
-		}
-	}
-
-	if (!isCitusLocalTablePartitionCommand)
+	bool missingOK = false;
+	Oid childRelationId = GetPartitionCommandChildRelationId(alterTableCmd, missingOK);
+	if (!IsCitusLocalTable(parentRelationId) && !IsCitusLocalTable(childRelationId))
 	{
 		return;
 	}

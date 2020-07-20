@@ -1,6 +1,7 @@
 -- This test file includes tests to show that we do not allow triggers
--- on citus tables. Note that in other regression tests, we already test
--- the successfull citus table creation cases.
+-- on distributed tables and reference tables. Note that in other
+-- regression tests, we already test the successfull citus table
+-- creation cases.
 \set VERBOSITY terse
 SET citus.next_shard_id TO 1505000;
 CREATE SCHEMA table_triggers_schema;
@@ -33,11 +34,11 @@ SELECT create_reference_table('reference_table');
 CREATE TRIGGER update_value_dist
 AFTER INSERT ON distributed_table
 FOR EACH ROW EXECUTE PROCEDURE update_value();
-ERROR:  cannot execute CREATE/ALTER/DROP trigger command for relation "distributed_table" because it is either a distributed table or a reference table
+ERROR:  cannot execute command on table "distributed_table" because triggers are not supported for distributed and reference tables
 CREATE TRIGGER update_value_ref
 AFTER INSERT ON reference_table
 FOR EACH ROW EXECUTE PROCEDURE update_value();
-ERROR:  cannot execute CREATE/ALTER/DROP trigger command for relation "reference_table" because it is either a distributed table or a reference table
+ERROR:  cannot execute command on table "reference_table" because triggers are not supported for distributed and reference tables
 ---------------------------------------------------------------------
 -- show that we error out for trigger commands on distributed & reference tables
 ---------------------------------------------------------------------
@@ -55,11 +56,11 @@ SET citus.enable_ddl_propagation to ON;
 CREATE EXTENSION seg;
 -- below all should error out
 ALTER TRIGGER update_value_dist ON distributed_table RENAME TO update_value_dist1;
-ERROR:  cannot execute CREATE/ALTER/DROP trigger command for relation "distributed_table" because it is either a distributed table or a reference table
+ERROR:  cannot execute command on table "distributed_table" because triggers are not supported for distributed and reference tables
 ALTER TRIGGER update_value_dist ON distributed_table DEPENDS ON EXTENSION seg;
-ERROR:  cannot execute CREATE/ALTER/DROP trigger command for relation "distributed_table" because it is either a distributed table or a reference table
+ERROR:  cannot execute command on table "distributed_table" because triggers are not supported for distributed and reference tables
 DROP TRIGGER update_value_dist ON distributed_table;
-ERROR:  cannot execute CREATE/ALTER/DROP trigger command for relation "distributed_table" because it is either a distributed table or a reference table
+ERROR:  cannot execute command on table "distributed_table" because triggers are not supported for distributed and reference tables
 ALTER TABLE distributed_table DISABLE TRIGGER ALL;
 ERROR:  cannot execute ALTER TABLE ENABLE/DISABLE TRIGGER command for relation "distributed_table" because it is either a distributed table or a reference table
 ALTER TABLE distributed_table DISABLE TRIGGER USER;
@@ -74,11 +75,11 @@ ALTER TABLE distributed_table ENABLE TRIGGER update_value_dist;
 ERROR:  cannot execute ALTER TABLE ENABLE/DISABLE TRIGGER command for relation "distributed_table" because it is either a distributed table or a reference table
 -- below all should error out
 ALTER TRIGGER update_value_ref ON reference_table RENAME TO update_value_ref1;
-ERROR:  cannot execute CREATE/ALTER/DROP trigger command for relation "reference_table" because it is either a distributed table or a reference table
+ERROR:  cannot execute command on table "reference_table" because triggers are not supported for distributed and reference tables
 ALTER TRIGGER update_value_ref ON reference_table DEPENDS ON EXTENSION seg;
-ERROR:  cannot execute CREATE/ALTER/DROP trigger command for relation "reference_table" because it is either a distributed table or a reference table
+ERROR:  cannot execute command on table "reference_table" because triggers are not supported for distributed and reference tables
 DROP TRIGGER update_value_ref ON reference_table;
-ERROR:  cannot execute CREATE/ALTER/DROP trigger command for relation "reference_table" because it is either a distributed table or a reference table
+ERROR:  cannot execute command on table "reference_table" because triggers are not supported for distributed and reference tables
 ALTER TABLE reference_table DISABLE TRIGGER ALL;
 ERROR:  cannot execute ALTER TABLE ENABLE/DISABLE TRIGGER command for relation "reference_table" because it is either a distributed table or a reference table
 ALTER TABLE reference_table DISABLE TRIGGER USER;

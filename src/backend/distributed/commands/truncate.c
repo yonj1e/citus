@@ -10,12 +10,7 @@
 
 #include "postgres.h"
 #include "miscadmin.h"
-#include "distributed/pg_version_constants.h"
 
-#if PG_VERSION_NUM < PG_VERSION_12
-#include "access/htup_details.h"
-#endif
-#include "access/xact.h"
 #include "catalog/namespace.h"
 #include "catalog/pg_class.h"
 #include "commands/tablecmds.h"
@@ -25,7 +20,6 @@
 #include "distributed/commands.h"
 #include "distributed/commands/utility_hook.h"
 #include "distributed/coordinator_protocol.h"
-#include "distributed/create_citus_local_table.h"
 #include "distributed/deparse_shard_query.h"
 #include "distributed/distributed_planner.h"
 #include "distributed/foreign_key_relationship.h"

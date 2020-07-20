@@ -187,15 +187,18 @@ ErrorIfUnsupportedForeignConstraintExists(Relation relation, char referencingDis
 				/*
 				 * We only support RESTRICT and NO ACTION behaviors for the
 				 * foreign keys from reference tables to citus local tables.
+				 * This is because, we can't cascade dml operations from citus
+				 * local tables's coordinator placement to the remote placements
+				 * of the reference table.
 				 */
 				if (!(BehaviorIsRestrictOrNoAction(constraintForm->confdeltype) &&
 					  BehaviorIsRestrictOrNoAction(constraintForm->confupdtype)))
 				{
 					ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-									errmsg("cannot specify non-restrictive "
-										   "behaviors for foreign key constraints "
-										   "from reference tables to citus local "
-										   "tables")));
+									errmsg("cannot define foreign key constraint, "
+										   "foreign keys from reference tables to "
+										   "citus local tables can only be defined "
+										   "with NO ACTION or RESTRICT behaviors")));
 				}
 			}
 
@@ -214,7 +217,7 @@ ErrorIfUnsupportedForeignConstraintExists(Relation relation, char referencingDis
 								   "since foreign keys from reference tables "
 								   "to distributed tables are not supported"),
 							errdetail("A reference table can only have foreign "
-									  "keys to other reference tables and citus "
+									  "keys to other reference tables or citus "
 									  "local tables")));
 		}
 
