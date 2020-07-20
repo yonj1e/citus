@@ -824,3 +824,21 @@ GetTriggerTypeById(Oid triggerId)
 
 	return triggerType;
 }
+
+
+/*
+ * GetTriggerFunctionId returns OID of the function that the trigger with
+ * triggerId executes if the trigger exists. Otherwise, errors out.
+ */
+Oid
+GetTriggerFunctionId(Oid triggerId)
+{
+	bool missingOk = false;
+	HeapTuple triggerTuple = GetTriggerTupleById(triggerId, missingOk);
+
+	Form_pg_trigger triggerForm = (Form_pg_trigger) GETSTRUCT(triggerTuple);
+	Oid functionId = triggerForm->tgfoid;
+	heap_freetuple(triggerTuple);
+
+	return functionId;
+}

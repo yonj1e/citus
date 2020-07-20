@@ -320,6 +320,7 @@ extern void DropTriggerEventExtendNames(DropStmt *dropTriggerStmt, char *schemaN
 										uint64 shardId);
 extern List * CitusLocalTableTriggerCommandDDLJob(Oid relationId, char *triggerName,
 												  const char *queryString);
+extern Oid GetTriggerFunctionId(Oid triggerId);
 
 extern bool ShouldPropagateSetCommand(VariableSetStmt *setStmt);
 extern void PostprocessVariableSetStmt(VariableSetStmt *setStmt, const char *setCommand);
