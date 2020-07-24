@@ -54,7 +54,7 @@
 #define RangeTableEntryFromNSItem(a) (a)
 #define QueryCompletionCompat char
 #define varattnosyn varoattno
-#define varnosyn varnoold 
+#define varnosyn varnoold
 #endif
 #if PG_VERSION_NUM >= PG_VERSION_12
 
