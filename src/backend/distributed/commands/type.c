@@ -792,7 +792,7 @@ EnumValsList(Oid typeOid)
 				BTEqualStrategyNumber, F_OIDEQ,
 				ObjectIdGetDatum(typeOid));
 
-	Relation enum_rel = heap_open(EnumRelationId, AccessShareLock);
+	Relation enum_rel = table_open(EnumRelationId, AccessShareLock);
 	SysScanDesc enum_scan = systable_beginscan(enum_rel,
 											   EnumTypIdSortOrderIndexId,
 											   true, NULL,
@@ -806,7 +806,7 @@ EnumValsList(Oid typeOid)
 	}
 
 	systable_endscan(enum_scan);
-	heap_close(enum_rel, AccessShareLock);
+	table_close(enum_rel, AccessShareLock);
 	return vals;
 }
 

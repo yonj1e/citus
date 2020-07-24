@@ -650,7 +650,7 @@ GetTableIndexAndConstraintCommands(Oid relationId)
 	PushOverrideEmptySearchPath(CurrentMemoryContext);
 
 	/* open system catalog and scan all indexes that belong to this table */
-	Relation pgIndex = heap_open(IndexRelationId, AccessShareLock);
+	Relation pgIndex = table_open(IndexRelationId, AccessShareLock);
 
 	ScanKeyInit(&scanKey[0], Anum_pg_index_indrelid,
 				BTEqualStrategyNumber, F_OIDEQ, relationId);
@@ -698,7 +698,7 @@ GetTableIndexAndConstraintCommands(Oid relationId)
 
 	/* clean up scan and close system catalog */
 	systable_endscan(scanDescriptor);
-	heap_close(pgIndex, AccessShareLock);
+	table_close(pgIndex, AccessShareLock);
 
 	/* revert back to original search_path */
 	PopOverrideSearchPath();

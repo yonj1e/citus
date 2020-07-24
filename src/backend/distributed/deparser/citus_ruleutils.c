@@ -129,7 +129,7 @@ get_extension_schema(Oid ext_oid)
 	HeapTuple	tuple;
 	ScanKeyData entry[1];
 
-	rel = heap_open(ExtensionRelationId, AccessShareLock);
+	rel = table_open(ExtensionRelationId, AccessShareLock);
 
 	ScanKeyInit(&entry[0],
 #if PG_VERSION_NUM >= PG_VERSION_12
@@ -153,7 +153,7 @@ get_extension_schema(Oid ext_oid)
 
 	systable_endscan(scandesc);
 
-	heap_close(rel, AccessShareLock);
+	table_close(rel, AccessShareLock);
 
 	return result;
 	/* *INDENT-ON* */
@@ -1182,7 +1182,7 @@ pg_get_replica_identity_command(Oid tableRelationId)
 {
 	StringInfo buf = makeStringInfo();
 
-	Relation relation = heap_open(tableRelationId, AccessShareLock);
+	Relation relation = table_open(tableRelationId, AccessShareLock);
 
 	char replicaIdentity = relation->rd_rel->relreplident;
 
@@ -1210,7 +1210,7 @@ pg_get_replica_identity_command(Oid tableRelationId)
 						 relationName);
 	}
 
-	heap_close(relation, AccessShareLock);
+	table_close(relation, AccessShareLock);
 
 	return (buf->len > 0) ? buf->data : NULL;
 }

@@ -29,10 +29,6 @@
 #endif
 
 #if PG_VERSION_NUM >= PG_VERSION_13
-#define heap_open(r, l) table_open(r, l)
-#define heap_openrv(r, l) table_openrv(r, l)
-#define heap_openrv_extended(r, l, m) table_openrv_extended(r, l, m)
-#define heap_close(r, l) table_close(r, l)
 #define lnext_compat(l, r) lnext(l, r)
 #define list_delete_cell_compat(l, c, p) list_delete_cell(l, c)
 #define pg_plan_query_compat(p, q, c, b) pg_plan_query(p, q, c, b)
@@ -126,6 +122,10 @@ FileCompatFromFileStart(File fileDesc)
 
 
 #else /* pre PG12 */
+#define table_open(r, l) heap_open(r, l)
+#define table_openrv(r, l) heap_openrv(r, l)
+#define table_openrv_extended(r, l, m) heap_openrv_extended(r, l, m)
+#define table_close(r, l) heap_close(r, l)
 #define QTW_EXAMINE_RTES_BEFORE QTW_EXAMINE_RTES
 #define MakeSingleTupleTableSlotCompat(tupleDesc, tts_opts) \
 	MakeSingleTupleTableSlot(tupleDesc)

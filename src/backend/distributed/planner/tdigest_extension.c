@@ -33,7 +33,7 @@ TDigestExtensionSchema()
 	Form_pg_extension extensionForm = NULL;
 	Oid tdigestExtensionSchema = InvalidOid;
 
-	Relation relation = heap_open(ExtensionRelationId, AccessShareLock);
+	Relation relation = table_open(ExtensionRelationId, AccessShareLock);
 
 	ScanKeyInit(&entry[0],
 				Anum_pg_extension_extname,
@@ -58,7 +58,7 @@ TDigestExtensionSchema()
 
 	systable_endscan(scandesc);
 
-	heap_close(relation, AccessShareLock);
+	table_close(relation, AccessShareLock);
 
 	return tdigestExtensionSchema;
 }

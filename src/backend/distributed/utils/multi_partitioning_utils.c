@@ -59,7 +59,7 @@ PartitionedTable(Oid relationId)
 	}
 
 	/* keep the lock */
-	heap_close(rel, NoLock);
+	table_close(rel, NoLock);
 
 	return partitionedTable;
 }
@@ -88,7 +88,7 @@ PartitionedTableNoLock(Oid relationId)
 	}
 
 	/* keep the lock */
-	heap_close(rel, NoLock);
+	table_close(rel, NoLock);
 
 	return partitionedTable;
 }
@@ -111,7 +111,7 @@ PartitionTable(Oid relationId)
 	bool partitionTable = rel->rd_rel->relispartition;
 
 	/* keep the lock */
-	heap_close(rel, NoLock);
+	table_close(rel, NoLock);
 
 	return partitionTable;
 }
@@ -136,7 +136,7 @@ PartitionTableNoLock(Oid relationId)
 	bool partitionTable = rel->rd_rel->relispartition;
 
 	/* keep the lock */
-	heap_close(rel, NoLock);
+	table_close(rel, NoLock);
 
 	return partitionTable;
 }
@@ -186,7 +186,7 @@ IsChildTable(Oid relationId)
 	HeapTuple inheritsTuple = NULL;
 	bool tableInherits = false;
 
-	Relation pgInherits = heap_open(InheritsRelationId, AccessShareLock);
+	Relation pgInherits = table_open(InheritsRelationId, AccessShareLock);
 
 	ScanKeyInit(&key[0], Anum_pg_inherits_inhrelid,
 				BTEqualStrategyNumber, F_OIDEQ,
@@ -208,7 +208,7 @@ IsChildTable(Oid relationId)
 	}
 
 	systable_endscan(scan);
-	heap_close(pgInherits, AccessShareLock);
+	table_close(pgInherits, AccessShareLock);
 
 	if (tableInherits && PartitionTable(relationId))
 	{
@@ -230,7 +230,7 @@ IsParentTable(Oid relationId)
 	ScanKeyData key[1];
 	bool tableInherited = false;
 
-	Relation pgInherits = heap_open(InheritsRelationId, AccessShareLock);
+	Relation pgInherits = table_open(InheritsRelationId, AccessShareLock);
 
 	ScanKeyInit(&key[0], Anum_pg_inherits_inhparent,
 				BTEqualStrategyNumber, F_OIDEQ,
@@ -244,7 +244,7 @@ IsParentTable(Oid relationId)
 		tableInherited = true;
 	}
 	systable_endscan(scan);
-	heap_close(pgInherits, AccessShareLock);
+	table_close(pgInherits, AccessShareLock);
 
 	if (tableInherited && PartitionedTable(relationId))
 	{
@@ -278,7 +278,7 @@ PartitionParentOid(Oid partitionOid)
 List *
 PartitionList(Oid parentRelationId)
 {
-	Relation rel = heap_open(parentRelationId, AccessShareLock);
+	Relation rel = table_open(parentRelationId, AccessShareLock);
 	List *partitionList = NIL;
 
 
@@ -299,7 +299,7 @@ PartitionList(Oid parentRelationId)
 	}
 
 	/* keep the lock */
-	heap_close(rel, NoLock);
+	table_close(rel, NoLock);
 
 	return partitionList;
 }

@@ -353,7 +353,7 @@ GetFunctionColocationId(Oid functionOid, char *colocateWithTableName,
 						Oid distributionArgumentOid)
 {
 	int colocationId = INVALID_COLOCATION_ID;
-	Relation pgDistColocation = heap_open(DistColocationRelationId(), ShareLock);
+	Relation pgDistColocation = table_open(DistColocationRelationId(), ShareLock);
 
 	if (pg_strncasecmp(colocateWithTableName, "default", NAMEDATALEN) == 0)
 	{
@@ -401,7 +401,7 @@ GetFunctionColocationId(Oid functionOid, char *colocateWithTableName,
 	}
 
 	/* keep the lock */
-	heap_close(pgDistColocation, NoLock);
+	table_close(pgDistColocation, NoLock);
 
 	return colocationId;
 }
@@ -490,7 +490,7 @@ UpdateFunctionDistributionInfo(const ObjectAddress *distAddress,
 	bool isnull[Natts_pg_dist_object];
 	bool replace[Natts_pg_dist_object];
 
-	Relation pgDistObjectRel = heap_open(DistObjectRelationId(), RowExclusiveLock);
+	Relation pgDistObjectRel = table_open(DistObjectRelationId(), RowExclusiveLock);
 	TupleDesc tupleDescriptor = RelationGetDescr(pgDistObjectRel);
 
 	/* scan pg_dist_object for classid = $1 AND objid = $2 AND objsubid = $3 via index */
@@ -550,7 +550,7 @@ UpdateFunctionDistributionInfo(const ObjectAddress *distAddress,
 
 	systable_endscan(scanDescriptor);
 
-	heap_close(pgDistObjectRel, NoLock);
+	table_close(pgDistObjectRel, NoLock);
 }
 
 
