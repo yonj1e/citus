@@ -1386,11 +1386,10 @@ RangeTableOffsetCompat(PlannerInfo *root, AppendRelInfo *appendRelInfo)
 		}
 	}
 	int indexInRtable = (i - 1);
-	int rtoffset = appendRelInfo->parent_relid - 1 - (indexInRtable);
+	return appendRelInfo->parent_relid - 1 - (indexInRtable);
 	#else
-	int rtoffset = 0;
+	return 0;
 	#endif
-	return rtoffset;
 }
 
 
