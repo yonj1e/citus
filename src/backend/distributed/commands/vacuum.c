@@ -438,6 +438,8 @@ ExtractVacuumTargetRels(VacuumStmt *vacuumStmt)
 
 /*
  * This is mostly ExecVacuum from Postgres's commands/vacuum.c
+ * Note that ExecVacuum does an actual vacuum as well and we don't want
+ * that to happen in the coordinator hence we copied the rest here.
  */
 static CitusVacuumParams
 VacuumStmtParams(VacuumStmt *vacstmt)
