@@ -41,6 +41,9 @@
 #define SetListCellPtr(a, b) ((a)->ptr_value = (b))
 #define RangeTableEntryFromNSItem(a) ((a)->p_rte)
 #define QueryCompletionCompat QueryCompletion
+
+#define PG13Argument(code) code,
+
 #else /* pre PG13 */
 #define lnext_compat(l, r) lnext(r)
 #define list_delete_cell_compat(l, c, p) list_delete_cell(l, c, p)
@@ -55,6 +58,9 @@
 #define QueryCompletionCompat char
 #define varattnosyn varoattno
 #define varnosyn varnoold
+
+#define PG13Argument(code)
+
 #endif
 #if PG_VERSION_NUM >= PG_VERSION_12
 

@@ -13,6 +13,7 @@
 #include "postgres.h"
 
 #include "distributed/pg_version_constants.h"
+#include "distributed/version_compat.h"
 
 #include "nodes/plannodes.h"
 
@@ -183,17 +184,10 @@ typedef struct CitusCustomScanPath
 } CitusCustomScanPath;
 
 
-#if PG_VERSION_NUM >= PG_VERSION_13
 extern PlannedStmt * distributed_planner(Query *parse,
-										 const char *query_string,
+										 PG13Argument(const char *query_string)
 										 int cursorOptions,
 										 ParamListInfo boundParams);
-#else
-extern PlannedStmt * distributed_planner(Query *parse,
-										 int cursorOptions,
-										 ParamListInfo boundParams);
-#endif
-
 
 extern List * ExtractRangeTableEntryList(Query *query);
 extern List * ExtractReferenceTableRTEList(List *rteList);
