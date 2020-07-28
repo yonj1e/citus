@@ -128,9 +128,7 @@ static PlannedStmt * PlanDistributedStmt(DistributedPlanningContext *planContext
 /* Distributed planner hook */
 PlannedStmt *
 distributed_planner(Query *parse,
-	#if PG_VERSION_NUM >= PG_VERSION_13
-					const char *query_string,
-	#endif
+					PG13Argument(const char *query_string ,)
 					int cursorOptions,
 					ParamListInfo boundParams)
 {

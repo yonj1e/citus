@@ -41,6 +41,27 @@
 #define SetListCellPtr(a, b) ((a)->ptr_value = (b))
 #define RangeTableEntryFromNSItem(a) ((a)->p_rte)
 #define QueryCompletionCompat QueryCompletion
+
+/*
+ * Here we introduce a macro that could add conditional arguments to either the call site
+ * or the definition of a function.
+ *
+ * This set of macros adds the PG13Argument macro that can be used with either 1 or 2
+ * arguments. Both only adds the first argument to the code actually being compiled. The
+ * difference between them is that the 2 argument version also adds a trailing comma so
+ * that more arguments may follow.
+ *
+ * Usage could be
+ *  - function_call(a, b, PG13Argument(c))
+ *  - function_call(a, PG13Argument(b ,) c)
+ *  - void function_definition(int a, int b, PG13argument(int c))
+ *  - void function_definition(int a, PG13argument(int b ,) int c)
+ */
+#define GET_MACRO(_1,_2,NAME,...) NAME
+#define PG13Argument(...) GET_MACRO(__VA_ARGS__, PG13Argument2, PG13Argument1)(__VA_ARGS__)
+#define PG13Argument1(code) code
+#define PG13Argument2(code, empty) code ,
+
 #else /* pre PG13 */
 #define lnext_compat(l, r) lnext(r)
 #define list_delete_cell_compat(l, c, p) list_delete_cell(l, c, p)
@@ -55,6 +76,15 @@
 #define QueryCompletionCompat char
 #define varattnosyn varoattno
 #define varnosyn varnoold
+
+/*
+ * For how this works refer to the comments in the PG13 block.
+ */
+#define GET_MACRO(_1,_2,NAME,...) NAME
+#define PG13Argument(...) GET_MACRO(__VA_ARGS__, PG13Argument2, PG13Argument1)(__VA_ARGS__)
+#define PG13Argument1(code)
+#define PG13Argument2(code, empty)
+
 #endif
 #if PG_VERSION_NUM >= PG_VERSION_12
 
