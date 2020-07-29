@@ -577,7 +577,7 @@ MFLAGS=
 MAKEFLAGS=
 
 # Identity of this package.
-PACKAGE_NAME='Citus'
+PACKAGE_NAME='Citus test'
 PACKAGE_TARNAME='citus'
 PACKAGE_VERSION='9.5devel'
 PACKAGE_STRING='Citus 9.5devel'
