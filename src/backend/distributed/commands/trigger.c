@@ -802,8 +802,7 @@ CitusLocalTableTriggerCommandDDLJob(Oid relationId, char *triggerName,
 	{
 		/*
 		 * For DROP, ENABLE/DISABLE, ENABLE REPLICA/ALWAYS TRIGGER commands,
-		 * we create ddl job for below commands in preprocess. So trigger may
-		 * not exist.
+		 * we create ddl job in preprocess. So trigger may not exist.
 		 */
 		return NIL;
 	}
