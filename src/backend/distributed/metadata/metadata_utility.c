@@ -578,24 +578,6 @@ CopyShardInterval(ShardInterval *srcInterval)
 
 
 /*
- * CopyShardPlacement copies the values of the source placement into the
- * target placement.
- */
-void
-CopyShardPlacement(ShardPlacement *srcPlacement, ShardPlacement *destPlacement)
-{
-	/* first copy all by-value fields */
-	*destPlacement = *srcPlacement;
-
-	/* and then the fields pointing to external values */
-	if (srcPlacement->nodeName)
-	{
-		destPlacement->nodeName = pstrdup(srcPlacement->nodeName);
-	}
-}
-
-
-/*
  * ShardLength finds shard placements for the given shardId, extracts the length
  * of an active shard, and returns the shard's length. This function errors
  * out if we cannot find any active shard placements for the given shardId.

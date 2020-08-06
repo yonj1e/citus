@@ -102,8 +102,6 @@ extern List * LoadShardIntervalList(Oid relationId);
 extern int ShardIntervalCount(Oid relationId);
 extern List * LoadShardList(Oid relationId);
 extern ShardInterval * CopyShardInterval(ShardInterval *srcInterval);
-extern void CopyShardPlacement(ShardPlacement *srcPlacement,
-							   ShardPlacement *destPlacement);
 extern uint64 ShardLength(uint64 shardId);
 extern bool NodeGroupHasShardPlacements(int32 groupId,
 										bool onlyConsiderActivePlacements);

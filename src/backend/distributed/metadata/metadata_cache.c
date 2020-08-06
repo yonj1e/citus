@@ -2018,17 +2018,6 @@ DistColocationConfigurationIndexId(void)
 }
 
 
-/* return oid of pg_dist_colocation_pkey index */
-Oid
-DistColocationColocationidIndexId(void)
-{
-	CachedRelationLookup("pg_dist_colocation_pkey",
-						 &MetadataCache.distColocationColocationidIndexId);
-
-	return MetadataCache.distColocationColocationidIndexId;
-}
-
-
 /* return oid of pg_dist_partition relation */
 Oid
 DistPartitionRelationId(void)
@@ -2125,17 +2114,6 @@ DistTransactionGroupIndexId(void)
 						 &MetadataCache.distTransactionGroupIndexId);
 
 	return MetadataCache.distTransactionGroupIndexId;
-}
-
-
-/* return oid of pg_dist_transaction_unique_constraint */
-Oid
-DistTransactionRecordIndexId(void)
-{
-	CachedRelationLookup("pg_dist_transaction_unique_constraint",
-						 &MetadataCache.distTransactionRecordIndexId);
-
-	return MetadataCache.distTransactionRecordIndexId;
 }
 
 
@@ -2285,24 +2263,6 @@ CitusAnyValueFunctionId(void)
 	}
 
 	return MetadataCache.anyValueFunctionId;
-}
-
-
-/* return oid of the citus_text_send_as_jsonb(text) function */
-Oid
-CitusTextSendAsJsonbFunctionId(void)
-{
-	if (MetadataCache.textSendAsJsonbFunctionId == InvalidOid)
-	{
-		List *nameList = list_make2(makeString("pg_catalog"),
-									makeString("citus_text_send_as_jsonb"));
-		Oid paramOids[1] = { TEXTOID };
-
-		MetadataCache.textSendAsJsonbFunctionId =
-			LookupFuncName(nameList, 1, paramOids, false);
-	}
-
-	return MetadataCache.textSendAsJsonbFunctionId;
 }
 
 
@@ -2563,20 +2523,6 @@ SecondaryNodeRoleId(void)
 	}
 
 	return MetadataCache.secondaryNodeRoleId;
-}
-
-
-/* return the Oid of the 'unavailable' nodeRole enum value */
-Oid
-UnavailableNodeRoleId(void)
-{
-	if (!MetadataCache.unavailableNodeRoleId)
-	{
-		MetadataCache.unavailableNodeRoleId = LookupStringEnumValueId("noderole",
-																	  "unavailable");
-	}
-
-	return MetadataCache.unavailableNodeRoleId;
 }
 
 

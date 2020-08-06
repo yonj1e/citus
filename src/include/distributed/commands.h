@@ -157,7 +157,6 @@ extern void ErrorIfUnsupportedAlterIndexStmt(AlterTableStmt *alterTableStatement
 
 /* objectaddress.c - forward declarations */
 extern ObjectAddress CreateExtensionStmtObjectAddress(Node *stmt, bool missing_ok);
-extern ObjectAddress AlterExtensionStmtObjectAddress(Node *stmt, bool missing_ok);
 
 
 /* policy.c -  forward declarations */

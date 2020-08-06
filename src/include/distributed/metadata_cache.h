@@ -170,7 +170,6 @@ extern Oid CitusCatalogNamespaceId(void);
 /* relation oids */
 extern Oid DistColocationRelationId(void);
 extern Oid DistColocationConfigurationIndexId(void);
-extern Oid DistColocationColocationidIndexId(void);
 extern Oid DistPartitionRelationId(void);
 extern Oid DistShardRelationId(void);
 extern Oid DistPlacementRelationId(void);
@@ -190,7 +189,6 @@ extern Oid DistPlacementShardidIndexId(void);
 extern Oid DistPlacementPlacementidIndexId(void);
 extern Oid DistTransactionRelationId(void);
 extern Oid DistTransactionGroupIndexId(void);
-extern Oid DistTransactionRecordIndexId(void);
 extern Oid DistPlacementGroupidIndexId(void);
 extern Oid DistObjectPrimaryKeyIndexId(void);
 
@@ -204,7 +202,6 @@ Oid CitusReadIntermediateResultArrayFuncId(void);
 extern Oid CitusExtraDataContainerFuncId(void);
 extern Oid CitusWorkerHashFunctionId(void);
 extern Oid CitusAnyValueFunctionId(void);
-extern Oid CitusTextSendAsJsonbFunctionId(void);
 extern Oid PgTableVisibleFuncId(void);
 extern Oid CitusTableVisibleFuncId(void);
 extern Oid JsonbExtractPathFuncId(void);
@@ -212,7 +209,6 @@ extern Oid JsonbExtractPathFuncId(void);
 /* enum oids */
 extern Oid PrimaryNodeRoleId(void);
 extern Oid SecondaryNodeRoleId(void);
-extern Oid UnavailableNodeRoleId(void);
 extern Oid CitusCopyFormatTypeId(void);
 extern Oid TextCopyFormatId(void);
 extern Oid BinaryCopyFormatId(void);
