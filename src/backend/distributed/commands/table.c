@@ -43,6 +43,8 @@
 
 /* Local functions forward declarations for unsupported command checks */
 static void ErrorIfTableHasForeignKeyToCitusLocalTable(Oid relationId);
+static void PostprocessCreateTableStmtPartitionOf(CreateStmt *createStatement,
+												  const char *queryString);
 static void ErrorIfAlterTableDefinesFKeyFromPostgresToCitusLocalTable(
 	AlterTableStmt *alterTableStatement);
 static List * GetAlterTableStmtFKeyConstraintList(AlterTableStmt *alterTableStatement);
@@ -142,15 +144,10 @@ PreprocessDropTableStmt(Node *node, const char *queryString)
 /*
  * PostprocessCreateTableStmt takes CreateStmt object as a parameter and errors
  * out if it creates a table with a foreign key that references to a citus local
- * table.
- *
- * It also processes CREATE TABLE ... PARTITION OF statements and it checks
- * if user creates the table as a partition of a distributed table. In that case,
- * it distributes partition as well. Since the table itself is a partition,
- * CreateDistributedTable will attach it to its parent table automatically after
- * distributing it.
+ * table. It also processes CREATE TABLE ... PARTITION OF statements via
+ * PostprocessCreateTableStmtPartitionOf function.
  */
-List *
+void
 PostprocessCreateTableStmt(CreateStmt *createStatement, const char *queryString)
 {
 	/*
@@ -164,34 +161,48 @@ PostprocessCreateTableStmt(CreateStmt *createStatement, const char *queryString)
 
 	if (createStatement->inhRelations != NIL && createStatement->partbound != NULL)
 	{
-		RangeVar *parentRelation = linitial(createStatement->inhRelations);
-		bool parentMissingOk = false;
-		Oid parentRelationId = RangeVarGetRelid(parentRelation, NoLock,
-												parentMissingOk);
-
-		/* a partition can only inherit from single parent table */
-		Assert(list_length(createStatement->inhRelations) == 1);
-
-		Assert(parentRelationId != InvalidOid);
-
-		/*
-		 * If a partition is being created and if its parent is a distributed
-		 * table, we will distribute this table as well.
-		 */
-		if (IsCitusTable(parentRelationId))
-		{
-			Var *parentDistributionColumn = ForceDistPartitionKey(parentRelationId);
-			char parentDistributionMethod = DISTRIBUTE_BY_HASH;
-			char *parentRelationName = generate_qualified_relation_name(parentRelationId);
-			bool viaDeprecatedAPI = false;
-
-			CreateDistributedTable(relationId, parentDistributionColumn,
-								   parentDistributionMethod, parentRelationName,
-								   viaDeprecatedAPI);
-		}
+		/* process CREATE TABLE ... PARTITION OF command */
+		PostprocessCreateTableStmtPartitionOf(createStatement, queryString);
 	}
+}
 
-	return NIL;
+
+/*
+ * PostprocessCreateTableStmtPartitionOf processes CREATE TABLE ... PARTITION OF
+ * statements and it checks if user creates the table as a partition of a distributed
+ * table. In that case, it distributes partition as well. Since the table itself is a
+ * partition, CreateDistributedTable will attach it to its parent table automatically
+ * after distributing it.
+ */
+static void
+PostprocessCreateTableStmtPartitionOf(CreateStmt *createStatement, const
+									  char *queryString)
+{
+	RangeVar *parentRelation = linitial(createStatement->inhRelations);
+	bool missingOk = false;
+	Oid parentRelationId = RangeVarGetRelid(parentRelation, NoLock, missingOk);
+
+	/* a partition can only inherit from single parent table */
+	Assert(list_length(createStatement->inhRelations) == 1);
+
+	Assert(parentRelationId != InvalidOid);
+
+	/*
+	 * If a partition is being created and if its parent is a distributed
+	 * table, we will distribute this table as well.
+	 */
+	if (IsCitusTable(parentRelationId))
+	{
+		Oid relationId = RangeVarGetRelid(createStatement->relation, NoLock, missingOk);
+		Var *parentDistributionColumn = ForceDistPartitionKey(parentRelationId);
+		char parentDistributionMethod = DISTRIBUTE_BY_HASH;
+		char *parentRelationName = generate_qualified_relation_name(parentRelationId);
+		bool viaDeprecatedAPI = false;
+
+		CreateDistributedTable(relationId, parentDistributionColumn,
+							   parentDistributionMethod, parentRelationName,
+							   viaDeprecatedAPI);
+	}
 }
 
 
@@ -212,10 +223,12 @@ ErrorIfTableHasForeignKeyToCitusLocalTable(Oid relationId)
 					errmsg("cannot create table \"%s\" as it has a foreign key "
 						   "to a citus local table", relationName),
 					errhint("First create the table without foreign keys to "
-							"citus local tables and then convert your table to "
-							"a citus local table using SELECT create_citus_local_table('%s'), "
+							"citus local tables and then convert your table "
+							"either to a citus local table using SELECT "
+							"create_citus_local_table('%s') or to a reference "
+							"table using SELECT create_reference_table('%s'), "
 							"then define the foreign key with ALTER TABLE "
-							"command.", relationName)));
+							"command.", relationName, relationName)));
 }
 
 
@@ -1342,12 +1355,13 @@ ErrorIfUnsupportedAlterTableStmt(AlterTableStmt *alterTableStatement)
 				 */
 				if (commandList->length > 1)
 				{
-					ereport(ERROR, (errmsg("bug: cannot execute ENABLE/DISABLE TRIGGER "
+					ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR),
+									errmsg("cannot execute ENABLE/DISABLE TRIGGER "
 										   "command with other subcommands"),
 									errhint("You can issue each subcommand separately")));
 				}
 
-				ErrorOutForTriggerCommandIfNotCitusLocalTable(relationId);
+				ErrorOutForTriggerIfNotCitusLocalTable(relationId);
 
 				break;
 			}
@@ -1608,7 +1622,7 @@ InterShardDDLTaskList(Oid leftRelationId, Oid rightRelationId,
 	 * reference table shards as we will set foreign key only on reference table's
 	 * coordinator placement.
 	 */
-	if (IsReferenceTable(rightRelationId) && !IsCitusLocalTable(leftRelationId))
+	if (!IsCitusLocalTable(leftRelationId) && IsReferenceTable(rightRelationId))
 	{
 		int rightShardCount PG_USED_FOR_ASSERTS_ONLY = list_length(rightShardList);
 		int leftShardCount = list_length(leftShardList);

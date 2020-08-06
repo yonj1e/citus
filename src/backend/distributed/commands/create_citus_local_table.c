@@ -528,14 +528,15 @@ RenameShardRelationNonTruncateTriggers(Oid shardRelationId, uint64 shardId)
 		HeapTuple triggerTuple = GetTriggerTupleById(triggerId, missingOk);
 		Form_pg_trigger triggerForm = (Form_pg_trigger) GETSTRUCT(triggerTuple);
 
-		char *triggerName = NameStr(triggerForm->tgname);
-		char *commandString = NULL;
 		if (!TRIGGER_FOR_TRUNCATE(triggerForm->tgtype))
 		{
-			commandString = GetRenameShardTriggerCommand(shardRelationId, triggerName,
-														 shardId);
+			char *triggerName = NameStr(triggerForm->tgname);
+			char *commandString =
+				GetRenameShardTriggerCommand(shardRelationId, triggerName, shardId);
 			ExecuteAndLogDDLCommand(commandString);
 		}
+
+		heap_freetuple(triggerTuple);
 	}
 }
 
@@ -580,13 +581,14 @@ DropRelationTruncateTriggers(Oid relationId)
 		HeapTuple triggerTuple = GetTriggerTupleById(triggerId, missingOk);
 		Form_pg_trigger triggerForm = (Form_pg_trigger) GETSTRUCT(triggerTuple);
 
-		char *triggerName = NameStr(triggerForm->tgname);
-		char *commandString = NULL;
 		if (TRIGGER_FOR_TRUNCATE(triggerForm->tgtype))
 		{
-			commandString = GetDropTriggerCommand(relationId, triggerName);
+			char *triggerName = NameStr(triggerForm->tgname);
+			char *commandString = GetDropTriggerCommand(relationId, triggerName);
 			ExecuteAndLogDDLCommand(commandString);
 		}
+
+		heap_freetuple(triggerTuple);
 	}
 }
 
@@ -604,9 +606,9 @@ GetDropTriggerCommand(Oid relationId, char *triggerName)
 	/*
 	 * In postgres, the only possible object type that may depend on a trigger
 	 * is the "constraint" object implied by the trigger itself if it is a
-	 * constraint trigger, and it would be a internal dependency so it could
-	 * be dropped without using CASCADE. Other than this, it also possible to
-	 * define dependencies on trigger via recordDependencyOn api by other
+	 * constraint trigger, and it would be an internal dependency so it could
+	 * be dropped without using CASCADE. Other than this, it is also possible
+	 * to define dependencies on trigger via recordDependencyOn api by other
 	 * extensions. We don't handle those kind of dependencies, we just drop
 	 * them with CASCADE.
 	 */

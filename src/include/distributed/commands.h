@@ -234,8 +234,8 @@ extern Node * ProcessCreateSubscriptionStmt(CreateSubscriptionStmt *createSubStm
 
 /* table.c - forward declarations */
 extern List * PreprocessDropTableStmt(Node *stmt, const char *queryString);
-extern List * PostprocessCreateTableStmt(CreateStmt *createStatement,
-										 const char *queryString);
+extern void PostprocessCreateTableStmt(CreateStmt *createStatement,
+									   const char *queryString);
 extern List * PostprocessAlterTableStmtAttachPartition(
 	AlterTableStmt *alterTableStatement,
 	const char *queryString);
@@ -300,8 +300,6 @@ extern void PostprocessVacuumStmt(VacuumStmt *vacuumStmt, const char *vacuumComm
 
 /* trigger.c - forward declarations */
 extern List * GetExplicitTriggerCommandList(Oid relationId);
-extern List * GetExplicitTriggerNameList(Oid relationId);
-extern char * GetTriggerNameById(Oid triggerId);
 extern HeapTuple GetTriggerTupleById(Oid triggerId, bool missingOk);
 extern List * GetExplicitTriggerIdList(Oid relationId);
 extern Oid get_relation_trigger_oid_compat(HeapTuple heapTuple);
@@ -317,7 +315,7 @@ extern void AlterTriggerDependsEventExtendNames(
 	AlterObjectDependsStmt *alterTriggerDependsStmt,
 	char *schemaName, uint64 shardId);
 extern List * PreprocessDropTriggerStmt(Node *node, const char *queryString);
-extern void ErrorOutForTriggerCommandIfNotCitusLocalTable(Oid relationId);
+extern void ErrorOutForTriggerIfNotCitusLocalTable(Oid relationId);
 extern void DropTriggerEventExtendNames(DropStmt *dropTriggerStmt, char *schemaName,
 										uint64 shardId);
 extern List * CitusLocalTableTriggerCommandDDLJob(Oid relationId, char *triggerName,

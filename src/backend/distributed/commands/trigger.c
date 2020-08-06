@@ -91,47 +91,6 @@ GetExplicitTriggerCommandList(Oid relationId)
 
 
 /*
- * GetExplicitTriggerNameList returns a list of trigger names that are explicitly
- * created for the table with relationId. See comment of GetExplicitTriggerIdList
- * function.
- */
-List *
-GetExplicitTriggerNameList(Oid relationId)
-{
-	List *triggerNameList = NIL;
-
-	List *triggerIdList = GetExplicitTriggerIdList(relationId);
-
-	Oid triggerId = InvalidOid;
-	foreach_oid(triggerId, triggerIdList)
-	{
-		char *triggerHame = GetTriggerNameById(triggerId);
-		triggerNameList = lappend(triggerNameList, triggerHame);
-	}
-
-	return triggerNameList;
-}
-
-
-/*
- * GetTriggerNameById returns name of the trigger identified by triggerId if it
- * exists. Otherwise, errors out.
- */
-char *
-GetTriggerNameById(Oid triggerId)
-{
-	bool missingOk = false;
-	HeapTuple triggerTuple = GetTriggerTupleById(triggerId, missingOk);
-
-	Form_pg_trigger triggerForm = (Form_pg_trigger) GETSTRUCT(triggerTuple);
-	char *triggerName = pstrdup(NameStr(triggerForm->tgname));
-	heap_freetuple(triggerTuple);
-
-	return triggerName;
-}
-
-
-/*
  * GetTriggerTupleById returns copy of the heap tuple from pg_trigger for
  * the trigger with triggerId. If no such trigger exists, this function returns
  * NULL or errors out depending on missingOk.
@@ -370,7 +329,7 @@ ErrorIfUnsupportedCreateTriggerCommand(CreateTrigStmt *createTriggerStmt)
 	}
 
 	EnsureCoordinator();
-	ErrorOutForTriggerCommandIfNotCitusLocalTable(relationId);
+	ErrorOutForTriggerIfNotCitusLocalTable(relationId);
 }
 
 
@@ -449,7 +408,7 @@ ErrorIfUnsupportedAlterTriggerRenameCommand(RenameStmt *renameTriggerStmt)
 	}
 
 	EnsureCoordinator();
-	ErrorOutForTriggerCommandIfNotCitusLocalTable(relationId);
+	ErrorOutForTriggerIfNotCitusLocalTable(relationId);
 }
 
 
@@ -536,7 +495,7 @@ ErrorIfUnsupportedAlterTriggerDependsCommand(
 	}
 
 	EnsureCoordinator();
-	ErrorOutForTriggerCommandIfNotCitusLocalTable(relationId);
+	ErrorOutForTriggerIfNotCitusLocalTable(relationId);
 }
 
 
@@ -650,16 +609,16 @@ ErrorIfUnsupportedDropTriggerCommand(DropStmt *dropTriggerStmt)
 	}
 
 	EnsureCoordinator();
-	ErrorOutForTriggerCommandIfNotCitusLocalTable(relationId);
+	ErrorOutForTriggerIfNotCitusLocalTable(relationId);
 }
 
 
 /*
- * ErrorOutForTriggerCommandIfNotCitusLocalTable is a helper function to error
+ * ErrorOutForTriggerIfNotCitusLocalTable is a helper function to error
  * out for unsupported trigger commands depending on the citus table type.
  */
 void
-ErrorOutForTriggerCommandIfNotCitusLocalTable(Oid relationId)
+ErrorOutForTriggerIfNotCitusLocalTable(Oid relationId)
 {
 	if (IsCitusLocalTable(relationId))
 	{
@@ -744,13 +703,13 @@ ExtractDropStmtTriggerAndRelationName(DropStmt *dropTriggerStmt, char **triggerN
 	if (triggerName != NULL)
 	{
 		int triggerNameindex = objectNameListLength - 1;
-		*triggerName = strVal(list_nth(triggerObjectNameList, triggerNameindex));
+		*triggerName = strVal(safe_list_nth(triggerObjectNameList, triggerNameindex));
 	}
 
 	if (relationName != NULL)
 	{
 		int relationNameIndex = objectNameListLength - 2;
-		*relationName = strVal(list_nth(triggerObjectNameList, relationNameIndex));
+		*relationName = strVal(safe_list_nth(triggerObjectNameList, relationNameIndex));
 	}
 }
 
@@ -767,8 +726,9 @@ ErrorIfDropStmtDropsMultipleTriggers(DropStmt *dropTriggerStmt)
 	List *targetObjectList = dropTriggerStmt->objects;
 	if (list_length(targetObjectList) > 1)
 	{
-		ereport(ERROR, (errmsg("bug: cannot execute DROP TRIGGER command "
-							   "for multiple triggers")));
+		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR),
+						errmsg("cannot execute DROP TRIGGER command for multiple "
+							   "triggers")));
 	}
 }
 

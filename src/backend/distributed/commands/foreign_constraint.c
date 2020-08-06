@@ -573,9 +573,8 @@ get_relation_constraint_oid_compat(HeapTuple heapTuple)
 
 
 /*
- * HasForeignKeyToCitusLocalTable function returns true if any of the foreign
- * key constraints on the relation with relationId references to a citus local
- * table.
+ * HasForeignKeyToCitusLocalTable returns true if any of the foreign key constraints
+ * on the relation with relationId references to a citus local table.
  */
 bool
 HasForeignKeyToCitusLocalTable(Oid relationId)
@@ -586,9 +585,8 @@ HasForeignKeyToCitusLocalTable(Oid relationId)
 
 
 /*
- * GetForeignKeyOidsToCitusLocalTables function returns list of OIDs for the
- * foreign key constraints on the given relationId that are referencing to
- * citus local tables.
+ * GetForeignKeyOidsToCitusLocalTables returns list of OIDs for the foreign key
+ * constraints on the given relationId that are referencing to citus local tables.
  */
 static List *
 GetForeignKeyOidsToCitusLocalTables(Oid relationId)
@@ -602,8 +600,8 @@ GetForeignKeyOidsToCitusLocalTables(Oid relationId)
 
 
 /*
- * HasForeignKeyToReferenceTable function returns true if any of the foreign
- * key constraints on the relation with relationId references to a reference
+ * HasForeignKeyToReferenceTable returns true if any of the foreign key
+ * constraints on the relation with relationId references to a reference
  * table.
  */
 bool
@@ -616,9 +614,8 @@ HasForeignKeyToReferenceTable(Oid relationId)
 
 
 /*
- * GetForeignKeyOidsToReferenceTables function returns list of OIDs for the
- * foreign key constraints on the given relationId that are referencing to
- * reference tables.
+ * GetForeignKeyOidsToReferenceTables returns list of OIDs for the foreign key
+ * constraints on the given relationId that are referencing to reference tables.
  */
 static List *
 GetForeignKeyOidsToReferenceTables(Oid relationId)

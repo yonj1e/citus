@@ -118,8 +118,6 @@ ROLLBACK;
 ------------------------------------------------------
 
 CREATE SCHEMA "interesting!schema";
-CREATE TABLE "interesting!schema"."citus_local!_table"(value int);
-SELECT create_citus_local_table('"interesting!schema"."citus_local!_table"');
 
 -- below view is a helper to print triggers on both shell relation and
 -- shard relation for "citus_local_table"
@@ -135,6 +133,22 @@ BEGIN
     RETURN NEW;
 END;
 $dummy_function$ LANGUAGE plpgsql;
+
+BEGIN;
+    CREATE TABLE "interesting!schema"."citus_local!_table"(value int);
+
+    CREATE TRIGGER initial_truncate_trigger
+    AFTER TRUNCATE ON "interesting!schema"."citus_local!_table"
+    FOR EACH STATEMENT EXECUTE FUNCTION dummy_function();
+
+    SELECT create_citus_local_table('"interesting!schema"."citus_local!_table"');
+
+    -- we shouldn't see truncate trigger on shard relation as we drop it
+    SELECT * FROM citus_local_table_triggers;
+ROLLBACK;
+
+CREATE TABLE "interesting!schema"."citus_local!_table"(value int);
+SELECT create_citus_local_table('"interesting!schema"."citus_local!_table"');
 
 CREATE TRIGGER "trigger\'name"
 BEFORE INSERT ON "interesting!schema"."citus_local!_table"
