@@ -151,7 +151,7 @@ ErrorIfUnsupportedForeignConstraintExists(Relation relation, char referencingDis
 
 		if (!referencedIsCitus && !selfReferencingTable)
 		{
-			if (IsCitusLocalTableByParameters(referencingDistMethod,
+			if (IsCitusLocalTableByDistParams(referencingDistMethod,
 											  referencingReplicationModel))
 			{
 				ErrorOutForFKeyBetweenPostgresAndCitusLocalTable(referencedTableId);

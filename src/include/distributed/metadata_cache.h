@@ -122,11 +122,11 @@ typedef struct DistObjectCacheEntry
  * a citus local table or a reference table especially when the cache entry for
  * table is not inserted yet.
  */
-#define IsReferenceTableByParameters(partitionMethod, replicationModel) \
+#define IsReferenceTableByDistParams(partitionMethod, replicationModel) \
 	((partitionMethod) == DISTRIBUTE_BY_NONE && \
 	 (replicationModel) == REPLICATION_MODEL_2PC)
 
-#define IsCitusLocalTableByParameters(partitionMethod, replicationModel) \
+#define IsCitusLocalTableByDistParams(partitionMethod, replicationModel) \
 	((partitionMethod) == DISTRIBUTE_BY_NONE && \
 	 (replicationModel) != REPLICATION_MODEL_2PC)
 

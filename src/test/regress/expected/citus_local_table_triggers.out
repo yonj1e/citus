@@ -162,11 +162,9 @@ END;
 $dummy_function$ LANGUAGE plpgsql;
 BEGIN;
     CREATE TABLE "interesting!schema"."citus_local!_table"(value int);
-
     CREATE TRIGGER initial_truncate_trigger
     AFTER TRUNCATE ON "interesting!schema"."citus_local!_table"
     FOR EACH STATEMENT EXECUTE FUNCTION dummy_function();
-
     SELECT create_citus_local_table('"interesting!schema"."citus_local!_table"');
  create_citus_local_table
 ---------------------------------------------------------------------

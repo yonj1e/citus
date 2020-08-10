@@ -224,3 +224,20 @@ safe_list_nth(const List *list, int index)
 
 	return list_nth(list, index);
 }
+
+
+/*
+ * GenerateListFromElement returns a new list with length of listLength
+ * such that all the elements are identical with input listElement pointer.
+ */
+List *
+GenerateListFromElement(void *listElement, int listLength)
+{
+	List *list = NIL;
+	for (int i = 0; i < listLength; i++)
+	{
+		list = lappend(list, listElement);
+	}
+
+	return list;
+}

@@ -60,6 +60,15 @@ static List * InterShardDDLTaskList(Oid leftRelationId, Oid rightRelationId,
 static bool AlterInvolvesPartitionColumn(AlterTableStmt *alterTableStatement,
 										 AlterTableCmd *command);
 static void ErrorIfUnsupportedAlterAddConstraintStmt(AlterTableStmt *alterTableStatement);
+static List * CreateRightShardListForInterShardDDLTask(Oid rightRelationId,
+													   Oid leftRelationId,
+													   List *leftShardList);
+static void SetInterShardDDLTaskPlacementList(Task *task,
+											  ShardInterval *leftShardInterval,
+											  ShardInterval *rightShardInterval);
+static void SetInterShardDDLTaskRelationShardList(Task *task,
+												  ShardInterval *leftShardInterval,
+												  ShardInterval *rightShardInterval);
 
 /*
  * We need to run some of the commands sequentially if there is a foreign constraint
@@ -1596,66 +1605,40 @@ static List *
 InterShardDDLTaskList(Oid leftRelationId, Oid rightRelationId,
 					  const char *commandString)
 {
-	List *taskList = NIL;
-
 	List *leftShardList = LoadShardIntervalList(leftRelationId);
-	ListCell *leftShardCell = NULL;
+	List *rightShardList = CreateRightShardListForInterShardDDLTask(rightRelationId,
+																	leftRelationId,
+																	leftShardList);
+
+	/* lock metadata before getting placement lists */
+	LockShardListMetadata(leftShardList, ShareLock);
+
+	uint64 jobId = INVALID_JOB_ID;
+	int taskId = 1;
+
 	Oid leftSchemaId = get_rel_namespace(leftRelationId);
 	char *leftSchemaName = get_namespace_name(leftSchemaId);
 	char *escapedLeftSchemaName = quote_literal_cstr(leftSchemaName);
 
-	List *rightShardList = LoadShardIntervalList(rightRelationId);
-	ListCell *rightShardCell = NULL;
 	Oid rightSchemaId = get_rel_namespace(rightRelationId);
 	char *rightSchemaName = get_namespace_name(rightSchemaId);
 	char *escapedRightSchemaName = quote_literal_cstr(rightSchemaName);
 
 	char *escapedCommandString = quote_literal_cstr(commandString);
-	uint64 jobId = INVALID_JOB_ID;
-	int taskId = 1;
 
-	/*
-	 * If the right relation is a reference table and left relation is not a citus
-	 * local table, we need to make sure that the tasks are created in a way that
-	 * the right shard stays the same since we only have one placement per worker.
-	 * If left relation is a citus local table, then we don't need to populate
-	 * reference table shards as we will set foreign key only on reference table's
-	 * coordinator placement.
-	 */
-	if (!IsCitusLocalTable(leftRelationId) && IsReferenceTable(rightRelationId))
-	{
-		int rightShardCount PG_USED_FOR_ASSERTS_ONLY = list_length(rightShardList);
-		int leftShardCount = list_length(leftShardList);
+	List *taskList = NIL;
 
-		Assert(rightShardCount == 1);
-
-		ShardInterval *rightShardInterval = (ShardInterval *) linitial(rightShardList);
-		for (int shardCounter = 1; shardCounter < leftShardCount; shardCounter++)
-		{
-			rightShardList = lappend(rightShardList, rightShardInterval);
-		}
-	}
-
-	/* lock metadata before getting placement lists */
-	LockShardListMetadata(leftShardList, ShareLock);
-
+	ListCell *leftShardCell = NULL;
+	ListCell *rightShardCell = NULL;
 	forboth(leftShardCell, leftShardList, rightShardCell, rightShardList)
 	{
 		ShardInterval *leftShardInterval = (ShardInterval *) lfirst(leftShardCell);
-		uint64 leftShardId = leftShardInterval->shardId;
-		StringInfo applyCommand = makeStringInfo();
-		RelationShard *leftRelationShard = CitusMakeNode(RelationShard);
-		RelationShard *rightRelationShard = CitusMakeNode(RelationShard);
-
 		ShardInterval *rightShardInterval = (ShardInterval *) lfirst(rightShardCell);
+
+		uint64 leftShardId = leftShardInterval->shardId;
 		uint64 rightShardId = rightShardInterval->shardId;
 
-		leftRelationShard->relationId = leftRelationId;
-		leftRelationShard->shardId = leftShardId;
-
-		rightRelationShard->relationId = rightRelationId;
-		rightRelationShard->shardId = rightShardId;
-
+		StringInfo applyCommand = makeStringInfo();
 		appendStringInfo(applyCommand, WORKER_APPLY_INTER_SHARD_DDL_COMMAND,
 						 leftShardId, escapedLeftSchemaName, rightShardId,
 						 escapedRightSchemaName, escapedCommandString);
@@ -1668,28 +1651,92 @@ InterShardDDLTaskList(Oid leftRelationId, Oid rightRelationId,
 		task->dependentTaskList = NULL;
 		task->replicationModel = REPLICATION_MODEL_INVALID;
 		task->anchorShardId = leftShardId;
-
-		if (IsReferenceTable(leftRelationId) && IsCitusLocalTable(rightRelationId))
-		{
-			/*
-			 * If we are defining foreign key from a reference table to a citus
-			 * local table, then we will set foreign key only on reference table's
-			 * coordinator placement.
-			 */
-			task->taskPlacementList = GroupShardPlacementsForTableOnGroup(leftRelationId,
-																		  COORDINATOR_GROUP_ID);
-		}
-		else
-		{
-			task->taskPlacementList = ActiveShardPlacementList(leftShardId);
-		}
-
-		task->relationShardList = list_make2(leftRelationShard, rightRelationShard);
+		SetInterShardDDLTaskPlacementList(task, leftShardInterval, rightShardInterval);
+		SetInterShardDDLTaskRelationShardList(task, leftShardInterval,
+											  rightShardInterval);
 
 		taskList = lappend(taskList, task);
 	}
 
 	return taskList;
+}
+
+
+/*
+ * CreateRightShardListForInterShardDDLTask is an helper function that creates
+ * shard list for the right relation for InterShardDDLTaskList.
+ */
+static List *
+CreateRightShardListForInterShardDDLTask(Oid rightRelationId, Oid leftRelationId,
+										 List *leftShardList)
+{
+	List *rightShardList = LoadShardIntervalList(rightRelationId);
+
+	if (!IsCitusLocalTable(leftRelationId) && IsReferenceTable(rightRelationId))
+	{
+		/*
+		 * If the right relation is a reference table and left relation is not
+		 * a citus local table, we need to make sure that the tasks are created
+		 * in a way that the right shard stays the same since we only have one
+		 * placement per worker.
+		 * If left relation is a citus local table, then we don't need to populate
+		 * reference table shards as we will set foreign key only on reference
+		 * table's coordinator placement.
+		 */
+		ShardInterval *rightShard = (ShardInterval *) linitial(rightShardList);
+		int leftShardCount = list_length(leftShardList);
+		rightShardList = GenerateListFromElement(rightShard, leftShardCount);
+	}
+
+	return rightShardList;
+}
+
+
+/*
+ * SetInterShardDDLTaskPlacementList sets taskPlacementList field of given
+ * inter-shard DDL task according to passed shard interval arguments.
+ */
+static void
+SetInterShardDDLTaskPlacementList(Task *task, ShardInterval *leftShardInterval,
+								  ShardInterval *rightShardInterval)
+{
+	Oid leftRelationId = leftShardInterval->relationId;
+	Oid rightRelationId = rightShardInterval->relationId;
+	if (IsReferenceTable(leftRelationId) && IsCitusLocalTable(rightRelationId))
+	{
+		/*
+		 * If we are defining foreign key from a reference table to a citus
+		 * local table, then we will set foreign key only on reference table's
+		 * coordinator placement.
+		 */
+		task->taskPlacementList = GroupShardPlacementsForTableOnGroup(leftRelationId,
+																	  COORDINATOR_GROUP_ID);
+	}
+	else
+	{
+		uint64 leftShardId = leftShardInterval->shardId;
+		task->taskPlacementList = ActiveShardPlacementList(leftShardId);
+	}
+}
+
+
+/*
+ * SetInterShardDDLTaskRelationShardList sets relationShardList field of given
+ * inter-shard DDL task according to passed shard interval arguments.
+ */
+static void
+SetInterShardDDLTaskRelationShardList(Task *task, ShardInterval *leftShardInterval,
+									  ShardInterval *rightShardInterval)
+{
+	RelationShard *leftRelationShard = CitusMakeNode(RelationShard);
+	leftRelationShard->relationId = leftShardInterval->relationId;
+	leftRelationShard->shardId = leftShardInterval->shardId;
+
+	RelationShard *rightRelationShard = CitusMakeNode(RelationShard);
+	rightRelationShard->relationId = rightShardInterval->relationId;
+	rightRelationShard->shardId = rightShardInterval->shardId;
+
+	task->relationShardList = list_make2(leftRelationShard, rightRelationShard);
 }
 
 

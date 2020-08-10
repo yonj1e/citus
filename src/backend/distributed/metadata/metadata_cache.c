@@ -309,7 +309,7 @@ IsCitusLocalTable(Oid relationId)
 
 	char partitionMethod = tableEntry->partitionMethod;
 	char replicationModel = tableEntry->replicationModel;
-	return IsCitusLocalTableByParameters(partitionMethod, replicationModel);
+	return IsCitusLocalTableByDistParams(partitionMethod, replicationModel);
 }
 
 
@@ -329,7 +329,7 @@ IsReferenceTable(Oid relationId)
 
 	char partitionMethod = tableEntry->partitionMethod;
 	char replicationModel = tableEntry->replicationModel;
-	return IsReferenceTableByParameters(partitionMethod, replicationModel);
+	return IsReferenceTableByDistParams(partitionMethod, replicationModel);
 }
 
 
