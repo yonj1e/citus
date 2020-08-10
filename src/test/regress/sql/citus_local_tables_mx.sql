@@ -5,8 +5,8 @@ SET citus.shard_replication_factor TO 1;
 SET citus.enable_local_execution TO ON;
 SET citus.log_local_commands TO ON;
 
-CREATE SCHEMA citus_local_table_triggers_mx;
-SET search_path TO citus_local_table_triggers_mx;
+CREATE SCHEMA citus_local_tables_mx;
+SET search_path TO citus_local_tables_mx;
 
 -- ensure that coordinator is added to pg_dist_node
 SET client_min_messages to ERROR;
@@ -42,7 +42,7 @@ ALTER TABLE citus_local_table DISABLE TRIGGER ALL;
 SELECT run_command_on_workers(
 $$
 SELECT COUNT(*) FROM pg_depend, pg_trigger, pg_extension
-WHERE pg_trigger.tgrelid='citus_local_table_triggers_mx.citus_local_table'::regclass AND
+WHERE pg_trigger.tgrelid='citus_local_tables_mx.citus_local_table'::regclass AND
       pg_trigger.tgname='renamed_trigger' AND
       pg_trigger.tgenabled='D' AND
       pg_depend.classid='pg_trigger'::regclass AND
@@ -64,4 +64,4 @@ AFTER TRUNCATE ON citus_local_table
 FOR EACH STATEMENT EXECUTE FUNCTION another_dummy_function();
 
 -- cleanup at exit
-DROP SCHEMA citus_local_table_triggers_mx CASCADE;
+DROP SCHEMA citus_local_tables_mx CASCADE;

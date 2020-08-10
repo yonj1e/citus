@@ -3,8 +3,8 @@ SET citus.next_shard_id TO 1508000;
 SET citus.shard_replication_factor TO 1;
 SET citus.enable_local_execution TO ON;
 SET citus.log_local_commands TO ON;
-CREATE SCHEMA citus_local_table_triggers_mx;
-SET search_path TO citus_local_table_triggers_mx;
+CREATE SCHEMA citus_local_tables_mx;
+SET search_path TO citus_local_tables_mx;
 -- ensure that coordinator is added to pg_dist_node
 SET client_min_messages to ERROR;
 SELECT 1 FROM master_add_node('localhost', :master_port, groupId => 0);
@@ -36,7 +36,7 @@ $dummy_function$ LANGUAGE plpgsql;
 CREATE TRIGGER dummy_function_trigger
 BEFORE UPDATE OF value ON citus_local_table
 FOR EACH ROW EXECUTE FUNCTION dummy_function();
-NOTICE:  executing the command locally: SELECT worker_apply_shard_ddl_command (1508000, 'citus_local_table_triggers_mx', 'CREATE TRIGGER dummy_function_trigger
+NOTICE:  executing the command locally: SELECT worker_apply_shard_ddl_command (1508000, 'citus_local_tables_mx', 'CREATE TRIGGER dummy_function_trigger
 BEFORE UPDATE OF value ON citus_local_table
 FOR EACH ROW EXECUTE FUNCTION dummy_function();')
 -- Show that we can sync metadata successfully. That means, we create
@@ -49,17 +49,17 @@ SELECT start_metadata_sync_to_node('localhost', :worker_1_port);
 
 CREATE EXTENSION seg;
 ALTER TRIGGER dummy_function_trigger ON citus_local_table DEPENDS ON EXTENSION seg;
-NOTICE:  executing the command locally: SELECT worker_apply_shard_ddl_command (1508000, 'citus_local_table_triggers_mx', 'ALTER TRIGGER dummy_function_trigger ON citus_local_table DEPENDS ON EXTENSION seg;')
+NOTICE:  executing the command locally: SELECT worker_apply_shard_ddl_command (1508000, 'citus_local_tables_mx', 'ALTER TRIGGER dummy_function_trigger ON citus_local_table DEPENDS ON EXTENSION seg;')
 ALTER TRIGGER dummy_function_trigger ON citus_local_table RENAME TO renamed_trigger;
-NOTICE:  executing the command locally: SELECT worker_apply_shard_ddl_command (1508000, 'citus_local_table_triggers_mx', 'ALTER TRIGGER dummy_function_trigger ON citus_local_table RENAME TO renamed_trigger;')
+NOTICE:  executing the command locally: SELECT worker_apply_shard_ddl_command (1508000, 'citus_local_tables_mx', 'ALTER TRIGGER dummy_function_trigger ON citus_local_table RENAME TO renamed_trigger;')
 ALTER TABLE citus_local_table DISABLE TRIGGER ALL;
-NOTICE:  executing the command locally: SELECT worker_apply_shard_ddl_command (1508000, 'citus_local_table_triggers_mx', 'ALTER TABLE citus_local_table DISABLE TRIGGER ALL;')
+NOTICE:  executing the command locally: SELECT worker_apply_shard_ddl_command (1508000, 'citus_local_tables_mx', 'ALTER TABLE citus_local_table DISABLE TRIGGER ALL;')
 -- show that update trigger mx relation are depending on seg, renamed and disabled.
 -- both workers should should print 1.
 SELECT run_command_on_workers(
 $$
 SELECT COUNT(*) FROM pg_depend, pg_trigger, pg_extension
-WHERE pg_trigger.tgrelid='citus_local_table_triggers_mx.citus_local_table'::regclass AND
+WHERE pg_trigger.tgrelid='citus_local_tables_mx.citus_local_table'::regclass AND
       pg_trigger.tgname='renamed_trigger' AND
       pg_trigger.tgenabled='D' AND
       pg_depend.classid='pg_trigger'::regclass AND
@@ -85,5 +85,5 @@ CREATE TRIGGER another_dummy_function_trigger
 AFTER TRUNCATE ON citus_local_table
 FOR EACH STATEMENT EXECUTE FUNCTION another_dummy_function();
 -- cleanup at exit
-DROP SCHEMA citus_local_table_triggers_mx CASCADE;
+DROP SCHEMA citus_local_tables_mx CASCADE;
 NOTICE:  drop cascades to 5 other objects
