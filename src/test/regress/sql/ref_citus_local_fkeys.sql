@@ -82,6 +82,11 @@ DROP TABLE citus_local_table, reference_table;
 -- foreign key from reference table to citus local table --
 -----------------------------------------------------------
 
+-- first remove worker_2 to test the behavior when replicating a
+-- reference table that has a foreign key to a citus local table
+-- to a new node
+SELECT 1 FROM master_remove_node('localhost', :worker_2_port);
+
 -- create test tables
 CREATE TABLE citus_local_table(l1 int primary key);
 SELECT create_citus_local_table('citus_local_table');
@@ -110,6 +115,11 @@ ALTER TABLE reference_table ADD CONSTRAINT fkey_ref_to_local FOREIGN KEY(r1) REF
 
 -- show that we are checking for foreign key constraint after defining, this should fail
 INSERT INTO reference_table VALUES (4);
+
+-- enable the worker_2 to show that we don't try to set up the foreign keys
+-- between reference tables and citus local tables in worker_2 placements of
+-- the reference tables
+SELECT 1 FROM master_add_node('localhost', :worker_2_port);
 
 -- show that we support drop constraint
 BEGIN;
