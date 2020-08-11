@@ -209,6 +209,8 @@ ErrorIfUnsupportedForeignConstraintExists(Relation relation, char referencingDis
 				 * This is because, we can't cascade dml operations from citus
 				 * local tables's coordinator placement to the remote placements
 				 * of the reference table.
+				 * Note that for the foreign keys from reference tables to citus
+				 * local tables, we support all foreign key behaviors.
 				 */
 				if (!(BehaviorIsRestrictOrNoAction(constraintForm->confdeltype) &&
 					  BehaviorIsRestrictOrNoAction(constraintForm->confupdtype)))
