@@ -1953,17 +1953,6 @@ DistLocalGroupIdRelationId(void)
 }
 
 
-/* return oid of pg_dist_rebalance_strategy relation */
-Oid
-DistRebalanceStrategyRelationId(void)
-{
-	CachedRelationLookup("pg_dist_rebalance_strategy",
-						 &MetadataCache.distRebalanceStrategyRelationId);
-
-	return MetadataCache.distRebalanceStrategyRelationId;
-}
-
-
 /* return the oid of citus namespace */
 Oid
 CitusCatalogNamespaceId(void)

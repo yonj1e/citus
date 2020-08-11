@@ -162,7 +162,6 @@ extern ObjectAddress CreateExtensionStmtObjectAddress(Node *stmt, bool missing_o
 /* policy.c -  forward declarations */
 extern List * CreatePolicyCommands(Oid relationId);
 extern void ErrorIfUnsupportedPolicy(Relation relation);
-extern void ErrorIfUnsupportedPolicyExpr(Node *expr);
 extern List * PreprocessCreatePolicyStmt(Node *node, const char *queryString);
 extern List * PreprocessAlterPolicyStmt(Node *node, const char *queryString);
 extern List * PreprocessDropPolicyStmt(Node *stmt, const char *queryString);
