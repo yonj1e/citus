@@ -46,6 +46,7 @@
 #include "distributed/metadata_sync.h"
 #include "distributed/multi_executor.h"
 #include "distributed/namespace_utils.h"
+#include "distributed/reference_table_utils.h"
 #include "distributed/relation_access_tracking.h"
 #include "distributed/version_compat.h"
 #include "distributed/worker_create_or_replace.h"
@@ -112,6 +113,7 @@ create_distributed_function(PG_FUNCTION_ARGS)
 	int distributionArgumentIndex = -1;
 	Oid distributionArgumentOid = InvalidOid;
 	int colocationId = -1;
+	bool colocationWithReferenceTable = false;
 
 	char *distributionArgumentName = NULL;
 	char *colocateWithTableName = NULL;
@@ -150,6 +152,13 @@ create_distributed_function(PG_FUNCTION_ARGS)
 	{
 		colocateWithText = PG_GETARG_TEXT_P(2);
 		colocateWithTableName = text_to_cstring(colocateWithText);
+
+		/* check if the colocation belongs to a reference table */
+		if (pg_strncasecmp(colocateWithTableName, "default", NAMEDATALEN) != 0)
+		{
+			Oid colocationRelationId = ResolveRelationId(colocateWithText, false);
+			colocationWithReferenceTable = IsReferenceTable(colocationRelationId);
+		}
 	}
 
 	EnsureCoordinator();
@@ -174,9 +183,12 @@ create_distributed_function(PG_FUNCTION_ARGS)
 
 	MarkObjectDistributed(&functionAddress);
 
-	if (distributionArgumentName == NULL)
+	if (distributionArgumentName == NULL && !colocationWithReferenceTable)
 	{
-		/* cannot provide colocate_with without distribution_arg_name */
+		/*
+		 * cannot provide colocate_with without distribution_arg_name when the function
+		 * is not collocated with a reference table
+		 */
 		if (pg_strncasecmp(colocateWithTableName, "default", NAMEDATALEN) != 0)
 		{
 			char *functionName = get_func_name(funcOid);
@@ -185,13 +197,28 @@ create_distributed_function(PG_FUNCTION_ARGS)
 			ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 							errmsg("cannot distribute the function \"%s\" since the "
 								   "distribution argument is not valid ", functionName),
-							errhint("To provide \"colocate_with\" option, the"
-									" distribution argument parameter should also "
-									"be provided")));
+							errhint("To provide \"colocate_with\" option with a"
+									" distributed table, the distribution argument"
+									" parameter should also be provided")));
 		}
 
 		/* set distribution argument and colocationId to NULL */
 		UpdateFunctionDistributionInfo(&functionAddress, NULL, NULL);
+	}
+	else if (distributionArgumentName == NULL && colocationWithReferenceTable)
+	{
+		/* get the reference table colocation id */
+		colocationId = CreateReferenceTableColocationId();
+
+		/* set distribution argument to NULL and colocationId to the reference table colocation id */
+		UpdateFunctionDistributionInfo(&functionAddress, NULL, &colocationId);
+
+		/*
+		 * Once we have at least one distributed function/procedure that reads
+		 * from a reference table, we sync the metadata to nodes so that the
+		 * function/procedure delegation can be handled locally on the nodes.
+		 */
+		TriggerSyncMetadataToPrimaryNodes();
 	}
 	else if (distributionArgumentName != NULL)
 	{
@@ -419,7 +446,8 @@ EnsureFunctionCanBeColocatedWithTable(Oid functionOid, Oid distributionColumnTyp
 	char sourceDistributionMethod = sourceTableEntry->partitionMethod;
 	char sourceReplicationModel = sourceTableEntry->replicationModel;
 
-	if (sourceDistributionMethod != DISTRIBUTE_BY_HASH)
+	if (sourceDistributionMethod != DISTRIBUTE_BY_HASH &&
+		sourceDistributionMethod != DISTRIBUTE_BY_NONE)
 	{
 		char *functionName = get_func_name(functionOid);
 		char *sourceRelationName = get_rel_name(sourceRelationId);
@@ -427,8 +455,21 @@ EnsureFunctionCanBeColocatedWithTable(Oid functionOid, Oid distributionColumnTyp
 		ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						errmsg("cannot colocate function \"%s\" and table \"%s\" because "
 							   "colocate_with option is only supported for hash "
-							   "distributed tables.", functionName,
-							   sourceRelationName)));
+							   "distributed tables and reference tables.",
+							   functionName, sourceRelationName)));
+	}
+
+	if (sourceDistributionMethod == DISTRIBUTE_BY_NONE &&
+		distributionColumnType != InvalidOid)
+	{
+		char *functionName = get_func_name(functionOid);
+		char *sourceRelationName = get_rel_name(sourceRelationId);
+
+		ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						errmsg("cannot colocate function \"%s\" and table \"%s\" because "
+							   "distribution arguments are not supported when "
+							   "colocating with reference tables.",
+							   functionName, sourceRelationName)));
 	}
 
 	if (sourceReplicationModel != REPLICATION_MODEL_STREAMING)
