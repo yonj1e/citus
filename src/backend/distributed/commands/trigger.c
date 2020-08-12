@@ -45,10 +45,6 @@
 
 /* local function forward declarations */
 static bool IsCreateCitusTruncateTriggerStmt(CreateTrigStmt *createTriggerStmt);
-static void ErrorIfUnsupportedCreateTriggerCommand(CreateTrigStmt *createTriggerStmt);
-static void ErrorIfUnsupportedAlterTriggerRenameCommand(RenameStmt *renameTriggerStmt);
-static void ErrorIfUnsupportedAlterTriggerDependsCommand(AlterObjectDependsStmt *
-														 alterTriggerDependsStmt);
 static Value * GetAlterTriggerDependsTriggerNameValue(AlterObjectDependsStmt *
 													  alterTriggerDependsStmt);
 static void ErrorIfUnsupportedDropTriggerCommand(DropStmt *dropTriggerStmt);
@@ -222,7 +218,6 @@ List *
 PostprocessCreateTriggerStmt(Node *node, const char *queryString)
 {
 	CreateTrigStmt *createTriggerStmt = castNode(CreateTrigStmt, node);
-
 	RangeVar *relation = createTriggerStmt->relation;
 
 	bool missingOk = false;
@@ -233,12 +228,14 @@ PostprocessCreateTriggerStmt(Node *node, const char *queryString)
 		return NIL;
 	}
 
-	ErrorIfUnsupportedCreateTriggerCommand(createTriggerStmt);
+	EnsureCoordinator();
 
 	if (IsCreateCitusTruncateTriggerStmt(createTriggerStmt))
 	{
 		return NIL;
 	}
+
+	ErrorOutForTriggerIfNotCitusLocalTable(relationId);
 
 	if (IsCitusLocalTable(relationId))
 	{
@@ -307,33 +304,6 @@ IsCreateCitusTruncateTriggerStmt(CreateTrigStmt *createTriggerStmt)
 
 
 /*
- * ErrorIfUnsupportedCreateTriggerCommand errors out for unsupported
- * "CREATE TRIGGER triggerName ON relationName" commands.
- */
-static void
-ErrorIfUnsupportedCreateTriggerCommand(CreateTrigStmt *createTriggerStmt)
-{
-	if (IsCreateCitusTruncateTriggerStmt(createTriggerStmt))
-	{
-		return;
-	}
-
-	RangeVar *relation = createTriggerStmt->relation;
-
-	bool missingOk = false;
-	Oid relationId = RangeVarGetRelid(relation, CREATE_TRIGGER_LOCK_MODE, missingOk);
-
-	if (!IsCitusTable(relationId))
-	{
-		return;
-	}
-
-	EnsureCoordinator();
-	ErrorOutForTriggerIfNotCitusLocalTable(relationId);
-}
-
-
-/*
  * CreateTriggerEventExtendNames extends relation name and trigger name with
  * shardId, and sets schema name in given CreateTrigStmt.
  */
@@ -376,7 +346,8 @@ PostprocessAlterTriggerRenameStmt(Node *node, const char *queryString)
 		return NIL;
 	}
 
-	ErrorIfUnsupportedAlterTriggerRenameCommand(renameTriggerStmt);
+	EnsureCoordinator();
+	ErrorOutForTriggerIfNotCitusLocalTable(relationId);
 
 	if (IsCitusLocalTable(relationId))
 	{
@@ -387,28 +358,6 @@ PostprocessAlterTriggerRenameStmt(Node *node, const char *queryString)
 	}
 
 	return NIL;
-}
-
-
-/*
- * ErrorIfUnsupportedAlterTriggerRenameCommand errors out for unsupported
- * "ALTER TRIGGER oldName ON relationName RENAME TO newName" commands.
- */
-static void
-ErrorIfUnsupportedAlterTriggerRenameCommand(RenameStmt *renameTriggerStmt)
-{
-	RangeVar *relation = renameTriggerStmt->relation;
-
-	bool missingOk = false;
-	Oid relationId = RangeVarGetRelid(relation, ALTER_TRIGGER_LOCK_MODE, missingOk);
-
-	if (!IsCitusTable(relationId))
-	{
-		return;
-	}
-
-	EnsureCoordinator();
-	ErrorOutForTriggerIfNotCitusLocalTable(relationId);
 }
 
 
@@ -461,7 +410,8 @@ PostprocessAlterTriggerDependsStmt(Node *node, const char *queryString)
 		return NIL;
 	}
 
-	ErrorIfUnsupportedAlterTriggerDependsCommand(alterTriggerDependsStmt);
+	EnsureCoordinator();
+	ErrorOutForTriggerIfNotCitusLocalTable(relationId);
 
 	if (IsCitusLocalTable(relationId))
 	{
@@ -472,30 +422,6 @@ PostprocessAlterTriggerDependsStmt(Node *node, const char *queryString)
 	}
 
 	return NIL;
-}
-
-
-/*
- * ErrorIfUnsupportedAlterTriggerDependsCommand errors out for unsupported
- * "ALTER TRIGGER triggerName ON relationName DEPENDS ON extensionName"
- * commands.
- */
-static void
-ErrorIfUnsupportedAlterTriggerDependsCommand(
-	AlterObjectDependsStmt *alterTriggerDependsStmt)
-{
-	RangeVar *relation = alterTriggerDependsStmt->relation;
-
-	bool missingOk = false;
-	Oid relationId = RangeVarGetRelid(relation, ALTER_TRIGGER_LOCK_MODE, missingOk);
-
-	if (!IsCitusTable(relationId))
-	{
-		return;
-	}
-
-	EnsureCoordinator();
-	ErrorOutForTriggerIfNotCitusLocalTable(relationId);
 }
 
 
