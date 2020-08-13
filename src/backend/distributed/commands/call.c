@@ -45,7 +45,9 @@
 static bool CallFuncExprRemotely(CallStmt *callStmt,
 								 DistObjectCacheEntry *procedure,
 								 FuncExpr *funcExpr, DestReceiver *dest);
-static ShardPlacement * ShardPlacementWhenColocatedWithReferenceTable();
+static ShardPlacement * ShardPlacementWhenColocatedWithReferenceTable(
+	CitusTableCacheEntry *cacheEntry);
+
 static ShardPlacement * ShardPlacementWhenColocatedWithDistTable(
 	DistObjectCacheEntry *procedure,
 	FuncExpr *funcExpr,
@@ -93,15 +95,6 @@ CallFuncExprRemotely(CallStmt *callStmt, DistObjectCacheEntry *procedure,
 		return false;
 	}
 
-	bool colocationWithReferenceTable = IsReferenceTable(colocatedRelationId);
-	if (!colocationWithReferenceTable &&
-		(procedure->distributionArgIndex < 0 ||
-		 procedure->distributionArgIndex >= list_length(funcExpr->args)))
-	{
-		ereport(DEBUG1, (errmsg("cannot push down invalid distribution_argument_index")));
-		return false;
-	}
-
 	if (contain_volatile_functions((Node *) funcExpr->args))
 	{
 		ereport(DEBUG1, (errmsg("arguments in a distributed stored procedure must "
@@ -111,18 +104,20 @@ CallFuncExprRemotely(CallStmt *callStmt, DistObjectCacheEntry *procedure,
 
 	CitusTableCacheEntry *distTable = GetCitusTableCacheEntry(colocatedRelationId);
 	Var *partitionColumn = distTable->partitionColumn;
+	bool colocationWithReferenceTable = false;
 	if (partitionColumn == NULL)
 	{
 		/* This can happen if colocated with a reference table. Punt for now. */
 		ereport(DEBUG1, (errmsg(
 							 "will push down CALL for reference tables")));
-		Assert(colocationWithReferenceTable == true);
+		colocationWithReferenceTable = true;
+		Assert(IsReferenceTable(ColocatedTableId));
 	}
 
 	ShardPlacement *placement = NULL;
 	if (colocationWithReferenceTable)
 	{
-		placement = ShardPlacementWhenColocatedWithReferenceTable();
+		placement = ShardPlacementWhenColocatedWithReferenceTable(distTable);
 	}
 	else
 	{
@@ -210,9 +205,13 @@ CallFuncExprRemotely(CallStmt *callStmt, DistObjectCacheEntry *procedure,
 
 
 static ShardPlacement *
-ShardPlacementWhenColocatedWithReferenceTable()
+ShardPlacementWhenColocatedWithReferenceTable(CitusTableCacheEntry *cacheEntry)
 {
-	return NULL;
+	const ShardInterval *shardInterval = cacheEntry->sortedShardIntervalArray[0];
+	const uint64 referenceTableShardId = shardInterval->shardId;
+	const List *placementList = ActiveShardPlacementList(referenceTableShardId);
+
+	return (ShardPlacement *) linitial(placementList);
 }
 
 
@@ -220,8 +219,15 @@ static ShardPlacement *
 ShardPlacementWhenColocatedWithDistTable(DistObjectCacheEntry *procedure,
 										 FuncExpr *funcExpr,
 										 Var *partitionColumn,
-										 CitusTableCacheEntry *distTable)
+										 CitusTableCacheEntry *cacheEntry)
 {
+	if (procedure->distributionArgIndex < 0 ||
+		procedure->distributionArgIndex >= list_length(funcExpr->args))
+	{
+		ereport(DEBUG1, (errmsg("cannot push down invalid distribution_argument_index")));
+		return NULL;
+	}
+
 	Node *partitionValueNode = (Node *) list_nth(funcExpr->args,
 												 procedure->distributionArgIndex);
 	partitionValueNode = strip_implicit_coercions(partitionValueNode);
@@ -242,7 +248,7 @@ ShardPlacementWhenColocatedWithDistTable(DistObjectCacheEntry *procedure,
 	}
 
 	Datum partitionValueDatum = partitionValue->constvalue;
-	ShardInterval *shardInterval = FindShardInterval(partitionValueDatum, distTable);
+	ShardInterval *shardInterval = FindShardInterval(partitionValueDatum, cacheEntry);
 	if (shardInterval == NULL)
 	{
 		ereport(DEBUG1, (errmsg("cannot push down call, failed to find shard interval")));

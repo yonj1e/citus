@@ -120,8 +120,8 @@ call multi_mx_call.mx_call_proc(2, 0);
 select colocate_proc_with_table('mx_call_proc', 'mx_call_dist_table_1'::regclass, 2);
 call multi_mx_call.mx_call_proc(2, 0);
 
--- We don't currently support colocating with reference tables
-select colocate_proc_with_table('mx_call_proc', 'mx_call_dist_table_ref'::regclass, 1);
+-- We support colocating with reference tables
+select colocate_proc_with_table('mx_call_proc', 'mx_call_dist_table_ref'::regclass, NULL);
 call multi_mx_call.mx_call_proc(2, 0);
 
 -- We don't currently support colocating with replicated tables
