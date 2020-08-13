@@ -26,6 +26,7 @@
 #include "distributed/multi_executor.h"
 #include "distributed/multi_physical_planner.h"
 #include "distributed/adaptive_executor.h"
+#include "distributed/reference_table_utils.h"
 #include "distributed/remote_commands.h"
 #include "distributed/shard_pruning.h"
 #include "distributed/tuple_destination.h"
@@ -44,6 +45,13 @@
 static bool CallFuncExprRemotely(CallStmt *callStmt,
 								 DistObjectCacheEntry *procedure,
 								 FuncExpr *funcExpr, DestReceiver *dest);
+static ShardPlacement * ShardPlacementWhenColocatedWithReferenceTable();
+static ShardPlacement * ShardPlacementWhenColocatedWithDistTable(
+	DistObjectCacheEntry *procedure,
+	FuncExpr *funcExpr,
+	Var *partitionColumn,
+	CitusTableCacheEntry *
+	distTable);
 
 /*
  * CallDistributedProcedureRemotely calls a stored procedure on the worker if possible.
@@ -85,8 +93,10 @@ CallFuncExprRemotely(CallStmt *callStmt, DistObjectCacheEntry *procedure,
 		return false;
 	}
 
-	if (procedure->distributionArgIndex < 0 ||
-		procedure->distributionArgIndex >= list_length(funcExpr->args))
+	bool colocationWithReferenceTable = IsReferenceTable(colocatedRelationId);
+	if (!colocationWithReferenceTable &&
+		(procedure->distributionArgIndex < 0 ||
+		 procedure->distributionArgIndex >= list_length(funcExpr->args)))
 	{
 		ereport(DEBUG1, (errmsg("cannot push down invalid distribution_argument_index")));
 		return false;
@@ -105,47 +115,27 @@ CallFuncExprRemotely(CallStmt *callStmt, DistObjectCacheEntry *procedure,
 	{
 		/* This can happen if colocated with a reference table. Punt for now. */
 		ereport(DEBUG1, (errmsg(
-							 "cannot push down CALL for reference tables")));
+							 "will push down CALL for reference tables")));
+		Assert(colocationWithReferenceTable == true);
+	}
+
+	ShardPlacement *placement = NULL;
+	if (colocationWithReferenceTable)
+	{
+		placement = ShardPlacementWhenColocatedWithReferenceTable();
+	}
+	else
+	{
+		placement = ShardPlacementWhenColocatedWithDistTable(procedure, funcExpr,
+															 partitionColumn, distTable);
+	}
+
+	/* return if we could not find a placement */
+	if (placement == NULL)
+	{
 		return false;
 	}
 
-	Node *partitionValueNode = (Node *) list_nth(funcExpr->args,
-												 procedure->distributionArgIndex);
-	partitionValueNode = strip_implicit_coercions(partitionValueNode);
-	if (!IsA(partitionValueNode, Const))
-	{
-		ereport(DEBUG1, (errmsg("distribution argument value must be a constant")));
-		return false;
-	}
-
-	Const *partitionValue = (Const *) partitionValueNode;
-	if (partitionValue->consttype != partitionColumn->vartype)
-	{
-		bool missingOk = false;
-
-		partitionValue =
-			TransformPartitionRestrictionValue(partitionColumn, partitionValue,
-											   missingOk);
-	}
-
-	Datum partitionValueDatum = partitionValue->constvalue;
-	ShardInterval *shardInterval = FindShardInterval(partitionValueDatum, distTable);
-	if (shardInterval == NULL)
-	{
-		ereport(DEBUG1, (errmsg("cannot push down call, failed to find shard interval")));
-		return false;
-	}
-
-	List *placementList = ActiveShardPlacementList(shardInterval->shardId);
-	if (list_length(placementList) != 1)
-	{
-		/* punt on this for now */
-		ereport(DEBUG1, (errmsg(
-							 "cannot push down CALL for replicated distributed tables")));
-		return false;
-	}
-
-	ShardPlacement *placement = (ShardPlacement *) linitial(placementList);
 	WorkerNode *workerNode = FindWorkerNode(placement->nodeName, placement->nodePort);
 	if (workerNode == NULL || !workerNode->hasMetadata || !workerNode->metadataSynced)
 	{
@@ -175,7 +165,7 @@ CallFuncExprRemotely(CallStmt *callStmt, DistObjectCacheEntry *procedure,
 		task->dependentTaskList = NIL;
 		task->anchorShardId = placement->shardId;
 		task->relationShardList = NIL;
-		task->taskPlacementList = placementList;
+		task->taskPlacementList = list_make1(placement);
 
 		/*
 		 * We are delegating the distributed transaction to the worker, so we
@@ -216,4 +206,57 @@ CallFuncExprRemotely(CallStmt *callStmt, DistObjectCacheEntry *procedure,
 	}
 
 	return true;
+}
+
+
+static ShardPlacement *
+ShardPlacementWhenColocatedWithReferenceTable()
+{
+	return NULL;
+}
+
+
+static ShardPlacement *
+ShardPlacementWhenColocatedWithDistTable(DistObjectCacheEntry *procedure,
+										 FuncExpr *funcExpr,
+										 Var *partitionColumn,
+										 CitusTableCacheEntry *distTable)
+{
+	Node *partitionValueNode = (Node *) list_nth(funcExpr->args,
+												 procedure->distributionArgIndex);
+	partitionValueNode = strip_implicit_coercions(partitionValueNode);
+	if (!IsA(partitionValueNode, Const))
+	{
+		ereport(DEBUG1, (errmsg("distribution argument value must be a constant")));
+		return false;
+	}
+
+	Const *partitionValue = (Const *) partitionValueNode;
+	if (partitionValue->consttype != partitionColumn->vartype)
+	{
+		bool missingOk = false;
+
+		partitionValue =
+			TransformPartitionRestrictionValue(partitionColumn, partitionValue,
+											   missingOk);
+	}
+
+	Datum partitionValueDatum = partitionValue->constvalue;
+	ShardInterval *shardInterval = FindShardInterval(partitionValueDatum, distTable);
+	if (shardInterval == NULL)
+	{
+		ereport(DEBUG1, (errmsg("cannot push down call, failed to find shard interval")));
+		return NULL;
+	}
+
+	List *placementList = ActiveShardPlacementList(shardInterval->shardId);
+	if (list_length(placementList) != 1)
+	{
+		/* punt on this for now */
+		ereport(DEBUG1, (errmsg(
+							 "cannot push down CALL for replicated distributed tables")));
+		return NULL;
+	}
+
+	return (ShardPlacement *) linitial(placementList);
 }
