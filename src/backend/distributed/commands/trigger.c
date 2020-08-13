@@ -218,8 +218,12 @@ List *
 PostprocessCreateTriggerStmt(Node *node, const char *queryString)
 {
 	CreateTrigStmt *createTriggerStmt = castNode(CreateTrigStmt, node);
-	RangeVar *relation = createTriggerStmt->relation;
+	if (IsCreateCitusTruncateTriggerStmt(createTriggerStmt))
+	{
+		return NIL;
+	}
 
+	RangeVar *relation = createTriggerStmt->relation;
 	bool missingOk = false;
 	Oid relationId = RangeVarGetRelid(relation, CREATE_TRIGGER_LOCK_MODE, missingOk);
 
@@ -229,11 +233,6 @@ PostprocessCreateTriggerStmt(Node *node, const char *queryString)
 	}
 
 	EnsureCoordinator();
-
-	if (IsCreateCitusTruncateTriggerStmt(createTriggerStmt))
-	{
-		return NIL;
-	}
 
 	ErrorOutForTriggerIfNotCitusLocalTable(relationId);
 
