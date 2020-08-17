@@ -353,6 +353,10 @@ TryToDelegateFunctionCall(DistributedPlanningContext *planContext)
 }
 
 
+/*
+ * ShardPlacementWhenColocatedWithDistTable decides on a placement
+ * for delegating a procedure call that accesses a distributed table.
+ */
 static ShardPlacement *
 ShardPlacementWhenColocatedWithDistTable(DistObjectCacheEntry *procedure,
 										 FuncExpr *funcExpr,
@@ -418,6 +422,13 @@ ShardPlacementWhenColocatedWithDistTable(DistObjectCacheEntry *procedure,
 }
 
 
+/*
+ * ShardPlacementWhenColocatedWithReferenceTable decides on a placement for delegating
+ * a procedure call that reads from a reference table.
+ *
+ * If citus.task_assignment_policy is set to round-robin, we assign a different placement
+ * on consecutive runs. Otherwise the function returns the first placement available.
+ */
 static ShardPlacement *
 ShardPlacementWhenColocatedWithReferenceTable(CitusTableCacheEntry *cacheEntry)
 {
