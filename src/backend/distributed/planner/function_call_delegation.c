@@ -421,5 +421,9 @@ ShardPlacementWhenColocatedWithDistTable(DistObjectCacheEntry *procedure,
 static ShardPlacement *
 ShardPlacementWhenColocatedWithReferenceTable(CitusTableCacheEntry *cacheEntry)
 {
-	return NULL;
+	const ShardInterval *shardInterval = cacheEntry->sortedShardIntervalArray[0];
+	const uint64 referenceTableShardId = shardInterval->shardId;
+	const List *placementList = ActiveShardPlacementList(referenceTableShardId);
+
+	return (ShardPlacement *) linitial(placementList);
 }
