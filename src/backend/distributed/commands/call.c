@@ -209,7 +209,12 @@ ShardPlacementWhenColocatedWithReferenceTable(CitusTableCacheEntry *cacheEntry)
 {
 	const ShardInterval *shardInterval = cacheEntry->sortedShardIntervalArray[0];
 	const uint64 referenceTableShardId = shardInterval->shardId;
-	const List *placementList = ActiveShardPlacementList(referenceTableShardId);
+	List *placementList = ActiveShardPlacementList(referenceTableShardId);
+
+	if (TaskAssignmentPolicy == TASK_ASSIGNMENT_ROUND_ROBIN)
+	{
+		placementList = RoundRobinReorder(NULL, placementList);
+	}
 
 	return (ShardPlacement *) linitial(placementList);
 }
