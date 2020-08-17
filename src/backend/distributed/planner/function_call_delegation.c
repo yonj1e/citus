@@ -57,6 +57,16 @@ struct ParamWalkerContext
 };
 
 static bool contain_param_walker(Node *node, void *context);
+static ShardPlacement * ShardPlacementWhenColocatedWithDistTable(
+	DistObjectCacheEntry *procedure,
+	FuncExpr *funcExpr,
+	Var *partitionColumn,
+	CitusTableCacheEntry *
+	cacheEntry,
+	PlannedStmt *plan);
+static ShardPlacement * ShardPlacementWhenColocatedWithReferenceTable(
+	CitusTableCacheEntry *cacheEntry);
+
 
 /*
  * contain_param_walker scans node for Param nodes.
@@ -105,10 +115,7 @@ TryToDelegateFunctionCall(DistributedPlanningContext *planContext)
 	FuncExpr *funcExpr = NULL;
 	DistObjectCacheEntry *procedure = NULL;
 	Oid colocatedRelationId = InvalidOid;
-	Const *partitionValue = NULL;
-	Datum partitionValueDatum = 0;
-	ShardInterval *shardInterval = NULL;
-	List *placementList = NIL;
+	bool colocationWithReferenceTable = false;
 	CitusTableCacheEntry *distTable = NULL;
 	Var *partitionColumn = NULL;
 	ShardPlacement *placement = NULL;
@@ -246,13 +253,6 @@ TryToDelegateFunctionCall(DistributedPlanningContext *planContext)
 		return NULL;
 	}
 
-	if (procedure->distributionArgIndex < 0 ||
-		procedure->distributionArgIndex >= list_length(funcExpr->args))
-	{
-		ereport(DEBUG1, (errmsg("function call does not have a distribution argument")));
-		return NULL;
-	}
-
 	if (contain_volatile_functions((Node *) funcExpr->args))
 	{
 		ereport(DEBUG1, (errmsg("arguments in a distributed function must "
@@ -271,30 +271,7 @@ TryToDelegateFunctionCall(DistributedPlanningContext *planContext)
 	partitionColumn = distTable->partitionColumn;
 	if (partitionColumn == NULL)
 	{
-		/* This can happen if colocated with a reference table. Punt for now. */
-		ereport(DEBUG1, (errmsg(
-							 "cannnot push down function call for reference tables")));
-		return NULL;
-	}
-
-	partitionValue = (Const *) list_nth(funcExpr->args, procedure->distributionArgIndex);
-
-	if (IsA(partitionValue, Param))
-	{
-		Param *partitionParam = (Param *) partitionValue;
-
-		if (partitionParam->paramkind == PARAM_EXTERN)
-		{
-			/* Don't log a message, we should end up here again without a parameter */
-			DissuadePlannerFromUsingPlan(planContext->plan);
-			return NULL;
-		}
-	}
-
-	if (!IsA(partitionValue, Const))
-	{
-		ereport(DEBUG1, (errmsg("distribution argument value must be a constant")));
-		return NULL;
+		colocationWithReferenceTable = true;
 	}
 
 	/*
@@ -308,33 +285,23 @@ TryToDelegateFunctionCall(DistributedPlanningContext *planContext)
 		return NULL;
 	}
 
-	partitionValueDatum = partitionValue->constvalue;
-
-	if (partitionValue->consttype != partitionColumn->vartype)
+	if (colocationWithReferenceTable)
 	{
-		bool missingOk = false;
-		partitionValue =
-			TransformPartitionRestrictionValue(partitionColumn, partitionValue,
-											   missingOk);
+		placement = ShardPlacementWhenColocatedWithReferenceTable(distTable);
+	}
+	else
+	{
+		placement = ShardPlacementWhenColocatedWithDistTable(procedure, funcExpr,
+															 partitionColumn, distTable,
+															 planContext->plan);
 	}
 
-	shardInterval = FindShardInterval(partitionValueDatum, distTable);
-	if (shardInterval == NULL)
+	/* return if we could not find a placement */
+	if (placement == NULL)
 	{
-		ereport(DEBUG1, (errmsg("cannot push down call, failed to find shard interval")));
-		return NULL;
+		return false;
 	}
 
-	placementList = ActiveShardPlacementList(shardInterval->shardId);
-	if (list_length(placementList) != 1)
-	{
-		/* punt on this for now */
-		ereport(DEBUG1, (errmsg(
-							 "cannot push down function call for replicated distributed tables")));
-		return NULL;
-	}
-
-	placement = (ShardPlacement *) linitial(placementList);
 	workerNode = FindWorkerNode(placement->nodeName, placement->nodePort);
 
 	if (workerNode == NULL || !workerNode->hasMetadata || !workerNode->metadataSynced)
@@ -364,9 +331,9 @@ TryToDelegateFunctionCall(DistributedPlanningContext *planContext)
 
 	task = CitusMakeNode(Task);
 	task->taskType = READ_TASK;
-	task->taskPlacementList = placementList;
+	task->taskPlacementList = list_make1(placement);
 	SetTaskQueryIfShouldLazyDeparse(task, planContext->query);
-	task->anchorShardId = shardInterval->shardId;
+	task->anchorShardId = placement->shardId;
 	task->replicationModel = distTable->replicationModel;
 
 	job = CitusMakeNode(Job);
@@ -383,4 +350,76 @@ TryToDelegateFunctionCall(DistributedPlanningContext *planContext)
 	distributedPlan->modLevel = ROW_MODIFY_READONLY;
 
 	return FinalizePlan(planContext->plan, distributedPlan);
+}
+
+
+static ShardPlacement *
+ShardPlacementWhenColocatedWithDistTable(DistObjectCacheEntry *procedure,
+										 FuncExpr *funcExpr,
+										 Var *partitionColumn,
+										 CitusTableCacheEntry *cacheEntry,
+										 PlannedStmt *plan)
+{
+	if (procedure->distributionArgIndex < 0 ||
+		procedure->distributionArgIndex >= list_length(funcExpr->args))
+	{
+		ereport(DEBUG1, (errmsg("function call does not have a distribution argument")));
+		return NULL;
+	}
+
+	Const *partitionValue = (Const *) list_nth(funcExpr->args,
+											   procedure->distributionArgIndex);
+
+	if (IsA(partitionValue, Param))
+	{
+		Param *partitionParam = (Param *) partitionValue;
+
+		if (partitionParam->paramkind == PARAM_EXTERN)
+		{
+			/* Don't log a message, we should end up here again without a parameter */
+			DissuadePlannerFromUsingPlan(plan);
+			return NULL;
+		}
+	}
+
+	if (!IsA(partitionValue, Const))
+	{
+		ereport(DEBUG1, (errmsg("distribution argument value must be a constant")));
+		return NULL;
+	}
+
+	Datum partitionValueDatum = partitionValue->constvalue;
+
+	if (partitionValue->consttype != partitionColumn->vartype)
+	{
+		bool missingOk = false;
+		partitionValue =
+			TransformPartitionRestrictionValue(partitionColumn, partitionValue,
+											   missingOk);
+	}
+
+	ShardInterval *shardInterval = FindShardInterval(partitionValueDatum, cacheEntry);
+	if (shardInterval == NULL)
+	{
+		ereport(DEBUG1, (errmsg("cannot push down call, failed to find shard interval")));
+		return NULL;
+	}
+
+	List *placementList = ActiveShardPlacementList(shardInterval->shardId);
+	if (list_length(placementList) != 1)
+	{
+		/* punt on this for now */
+		ereport(DEBUG1, (errmsg(
+							 "cannot push down function call for replicated distributed tables")));
+		return NULL;
+	}
+
+	return linitial(placementList);
+}
+
+
+static ShardPlacement *
+ShardPlacementWhenColocatedWithReferenceTable(CitusTableCacheEntry *cacheEntry)
+{
+	return NULL;
 }
