@@ -1712,3 +1712,65 @@ ReplaceTable(Oid sourceId, Oid targetId)
 						   sourceName, false);
 #endif
 }
+
+
+/*
+ * PostprocessCreateStmt handles CREATE TABLE statements after the command has been
+ * executed on the coordinator.
+ *
+ * We use this specifically for the CREATE TABLE ... (LIKE ...) syntax. When a table is
+ * created `LIKE` a distributed table we let it inherit the table's distribution column.
+ * Also the tables will be colocated.
+ *
+ * The primary use for this is to work well with partition management tools like
+ * pg_partman. Tables will be created like the parent table or like a template table. By
+ * distributing the table before attaching it to the parent table we can use distributed
+ * INSERT INTO SELECT to copy data from an old partition to a new partition.
+ */
+List *
+PostprocessCreateStmt(Node *node, const char *queryString)
+{
+	CreateStmt *createStmt = castNode(CreateStmt, node);
+
+	/* check if the command is a CREATE TABLE LIKE statement, early exit if not */
+	Node *tableElt = NULL;
+	TableLikeClause *likeClause = NULL;
+	foreach_ptr(tableElt, createStmt->tableElts)
+	{
+		if (IsA(tableElt, TableLikeClause))
+		{
+			likeClause = castNode(TableLikeClause, tableElt);
+		}
+	}
+
+	if (!likeClause)
+	{
+		/* No like clause in the table column definitions */
+		return NIL;
+	}
+
+	/*
+	 * here we have a like clause, we need to check if the creation is like a distributed
+	 * table
+	 */
+	Oid likeRelationId = RangeVarGetRelid(likeClause->relation, AccessShareLock, false);
+
+	if (!IsCitusTable(likeRelationId))
+	{
+		return NIL;
+
+	}
+
+	/* the relation is a Citus relation */
+	Oid newRelationId = RangeVarGetRelid(createStmt->relation, ExclusiveLock, false);
+
+	List *colocateNameList = MakeNameListFromRangeVar(likeClause->relation);
+	char *colocateWithTableName = NameListToQuotedString(colocateNameList);
+
+	CitusTableCacheEntry *cacheEntry = GetCitusTableCacheEntry(likeRelationId);
+	/* TODO check if it is OK in all cases to reuse the cache of the LIKE table for the partitionColumn*/
+	CreateDistributedTable(newRelationId, cacheEntry->partitionColumn,
+						   cacheEntry->partitionMethod, colocateWithTableName, false);
+
+	return NIL;
+}

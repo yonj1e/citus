@@ -72,6 +72,9 @@ extern char * GenerateBackupNameForCollationCollision(const ObjectAddress *addre
 extern ObjectAddress DefineCollationStmtObjectAddress(Node *stmt, bool missing_ok);
 extern List * PostprocessDefineCollationStmt(Node *stmt, const char *queryString);
 
+/* create_distirbuted_table.c - forward declarations */
+extern List * PostprocessCreateStmt(Node *node, const char *queryString);
+
 /* extension.c - forward declarations */
 extern bool IsDropCitusExtensionStmt(Node *parsetree);
 extern bool IsCreateAlterExtensionUpdateCitusStmt(Node *parsetree);

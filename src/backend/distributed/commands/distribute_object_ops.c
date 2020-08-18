@@ -155,6 +155,13 @@ static DistributeObjectOps Any_CreatePolicy = {
 	.postprocess = NULL,
 	.address = NULL,
 };
+static DistributeObjectOps Any_CreateStmt = {
+	.deparse = NULL,
+	.qualify = NULL,
+	.preprocess = NULL,
+	.postprocess = PostprocessCreateStmt,
+	.address = NULL,
+};
 static DistributeObjectOps Any_Grant = {
 	.deparse = NULL,
 	.qualify = NULL,
@@ -670,6 +677,11 @@ GetDistributeObjectOps(Node *node)
 		case T_CreateFunctionStmt:
 		{
 			return &Any_CreateFunction;
+		}
+
+		case T_CreateStmt:
+		{
+			return &Any_CreateStmt;
 		}
 
 		case T_CreatePolicyStmt:
