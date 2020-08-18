@@ -154,17 +154,6 @@ master_create_distributed_table(PG_FUNCTION_ARGS)
 
 	char *colocateWithTableName = NULL;
 	bool viaDeprecatedAPI = true;
-	ObjectAddress tableAddress = { 0 };
-
-
-	/*
-	 * distributed tables might have dependencies on different objects, since we create
-	 * shards for a distributed table via multiple sessions these objects will be created
-	 * via their own connection and committed immediately so they become visible to all
-	 * sessions creating shards.
-	 */
-	ObjectAddressSet(tableAddress, RelationRelationId, relationId);
-	EnsureDependenciesExistOnAllNodes(&tableAddress);
 
 	/*
 	 * Lock target relation with an exclusive lock - there's no way to make
@@ -202,8 +191,6 @@ master_create_distributed_table(PG_FUNCTION_ARGS)
 Datum
 create_distributed_table(PG_FUNCTION_ARGS)
 {
-	ObjectAddress tableAddress = { 0 };
-
 	bool viaDeprecatedAPI = false;
 
 	Oid relationId = PG_GETARG_OID(0);
@@ -214,15 +201,6 @@ create_distributed_table(PG_FUNCTION_ARGS)
 	CheckCitusVersion(ERROR);
 
 	EnsureCitusTableCanBeCreated(relationId);
-
-	/*
-	 * distributed tables might have dependencies on different objects, since we create
-	 * shards for a distributed table via multiple sessions these objects will be created
-	 * via their own connection and committed immediately so they become visible to all
-	 * sessions creating shards.
-	 */
-	ObjectAddressSet(tableAddress, RelationRelationId, relationId);
-	EnsureDependenciesExistOnAllNodes(&tableAddress);
 
 	/*
 	 * Lock target relation with an exclusive lock - there's no way to make
@@ -266,22 +244,12 @@ create_reference_table(PG_FUNCTION_ARGS)
 
 	char *colocateWithTableName = NULL;
 	Var *distributionColumn = NULL;
-	ObjectAddress tableAddress = { 0 };
 
 	bool viaDeprecatedAPI = false;
 
 	CheckCitusVersion(ERROR);
 
 	EnsureCitusTableCanBeCreated(relationId);
-
-	/*
-	 * distributed tables might have dependencies on different objects, since we create
-	 * shards for a distributed table via multiple sessions these objects will be created
-	 * via their own connection and committed immediately so they become visible to all
-	 * sessions creating shards.
-	 */
-	ObjectAddressSet(tableAddress, RelationRelationId, relationId);
-	EnsureDependenciesExistOnAllNodes(&tableAddress);
 
 	/*
 	 * Lock target relation with an exclusive lock - there's no way to make
@@ -368,6 +336,16 @@ void
 CreateDistributedTable(Oid relationId, Var *distributionColumn, char distributionMethod,
 					   char *colocateWithTableName, bool viaDeprecatedAPI)
 {
+	/*
+	 * distributed tables might have dependencies on different objects, since we create
+	 * shards for a distributed table via multiple sessions these objects will be created
+	 * via their own connection and committed immediately so they become visible to all
+	 * sessions creating shards.
+	 */
+	ObjectAddress tableAddress = { 0 };
+	ObjectAddressSet(tableAddress, RelationRelationId, relationId);
+	EnsureDependenciesExistOnAllNodes(&tableAddress);
+
 	char replicationModel = DecideReplicationModel(distributionMethod,
 												   viaDeprecatedAPI);
 
