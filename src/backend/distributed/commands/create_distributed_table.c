@@ -118,7 +118,6 @@ static List * TupleDescColumnNameList(TupleDesc tupleDescriptor);
 static bool RelationUsesIdentityColumns(TupleDesc relationDesc);
 static bool DistributionColumnUsesGeneratedStoredColumn(TupleDesc relationDesc,
 														Var *distributionColumn);
-static bool RelationUsesHeapAccessMethodOrNone(Relation relation);
 static bool CanUseExclusiveConnections(Oid relationId, bool localTableEmpty);
 static void DoCopyFromLocalTableIntoShards(Relation distributedRelation,
 										   DestReceiver *copyDest,
@@ -684,12 +683,6 @@ EnsureRelationCanBeDistributed(Oid relationId, Var *distributionColumn,
 	Relation relation = relation_open(relationId, NoLock);
 	TupleDesc relationDesc = RelationGetDescr(relation);
 	char *relationName = RelationGetRelationName(relation);
-
-	if (!RelationUsesHeapAccessMethodOrNone(relation))
-	{
-		ereport(ERROR, (errmsg(
-							"cannot distribute relations using non-heap access methods")));
-	}
 
 #if PG_VERSION_NUM < PG_VERSION_12
 
@@ -1385,12 +1378,11 @@ DoCopyFromLocalTableIntoShards(Relation distributedRelation,
 	MemoryContext oldContext = MemoryContextSwitchTo(GetPerTupleMemoryContext(estate));
 
 	uint64 rowsCopied = 0;
-	HeapTuple tuple = NULL;
-	while ((tuple = heap_getnext(scan, ForwardScanDirection)) != NULL)
+	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
 	{
 		/* materialize tuple and send it to a shard */
 #if PG_VERSION_NUM >= PG_VERSION_12
-		ExecStoreHeapTuple(tuple, slot, false);
+//		ExecStoreHeapTuple(tuple, slot, false);
 #else
 		ExecStoreTuple(tuple, slot, InvalidBuffer, false);
 #endif
@@ -1513,22 +1505,6 @@ DistributionColumnUsesGeneratedStoredColumn(TupleDesc relationDesc,
 #endif
 
 	return false;
-}
-
-
-/*
- * Returns whether given relation uses default access method
- */
-static bool
-RelationUsesHeapAccessMethodOrNone(Relation relation)
-{
-#if PG_VERSION_NUM >= PG_VERSION_12
-
-	return relation->rd_rel->relkind != RELKIND_RELATION ||
-		   relation->rd_amhandler == HEAP_TABLE_AM_HANDLER_OID;
-#else
-	return true;
-#endif
 }
 
 
